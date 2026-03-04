@@ -901,6 +901,135 @@ function Leaderboard({ bets }) {
 }
 
 // ============================================================
+// HALFTIME ENTERTAINMENT — video player with fullscreen
+// ============================================================
+// Extract YouTube video ID from any YouTube URL format
+function getYouTubeId(url) {
+  const patterns = [
+    /youtu\.be\/([^?&]+)/,
+    /youtube\.com\/watch\?v=([^&]+)/,
+    /youtube\.com\/embed\/([^?&]+)/,
+    /youtube\.com\/shorts\/([^?&]+)/,
+  ];
+  for (const p of patterns) {
+    const m = url.match(p);
+    if (m) return m[1];
+  }
+  return null;
+}
+
+// PLACEHOLDER YouTube ID — replace with real video when ready
+const PLACEHOLDER_YT_ID = "dQw4w9WgXcQ"; // classic placeholder
+
+function HalftimePlayer({ toast }) {
+  const SAVED_URL = (() => { try { return localStorage.getItem("cave_yt_url") || ""; } catch { return ""; } })();
+  const [ytUrl, setYtUrl] = useState(SAVED_URL);
+  const [inputVal, setInputVal] = useState(SAVED_URL);
+  const [editing, setEditing] = useState(!SAVED_URL);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const containerRef = useRef();
+
+  const videoId = getYouTubeId(ytUrl) || PLACEHOLDER_YT_ID;
+  const isPlaceholder = !getYouTubeId(ytUrl);
+
+  const saveUrl = () => {
+    const id = getYouTubeId(inputVal);
+    if (!inputVal.trim()) {
+      // clear back to placeholder
+      setYtUrl("");
+      setEditing(false);
+      try { localStorage.removeItem("cave_yt_url"); } catch {}
+      return;
+    }
+    if (!id) { toast("Invalid YouTube URL — paste the full link"); return; }
+    setYtUrl(inputVal);
+    setEditing(false);
+    try { localStorage.setItem("cave_yt_url", inputVal); } catch {}
+    toast("Power Hour loaded! 🎉");
+  };
+
+  const toggleFullscreen = () => {
+    if (!containerRef.current) return;
+    if (!document.fullscreenElement) {
+      containerRef.current.requestFullscreen().then(() => setIsFullscreen(true)).catch(()=>{});
+    } else {
+      document.exitFullscreen().then(() => setIsFullscreen(false));
+    }
+  };
+
+  useEffect(() => {
+    const fn = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", fn);
+    return () => document.removeEventListener("fullscreenchange", fn);
+  }, []);
+
+  const embedUrl = `https://www.youtube.com/embed/${videoId}?autoplay=0&rel=0&modestbranding=1`;
+
+  return (
+    <div>
+      <div style={{fontFamily:"'Bebas Neue',sans-serif",letterSpacing:3,fontSize:"1.1rem",color:"#f5c842",borderBottom:"1px solid #252538",paddingBottom:8,marginBottom:12}}>
+        🎉 HALFTIME ENTERTAINMENT
+      </div>
+
+      {/* PLACEHOLDER BANNER */}
+      {isPlaceholder && (
+        <div style={{background:"rgba(245,200,66,0.08)",border:"1px solid rgba(245,200,66,0.3)",borderRadius:6,padding:"8px 12px",marginBottom:10,fontSize:"0.75rem",color:"#f5c842",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:1}}>
+          ⚠ PLACEHOLDER VIDEO — Paste your Power Hour YouTube link below when ready
+        </div>
+      )}
+
+      {/* YOUTUBE EMBED */}
+      <div ref={containerRef} style={{position:"relative",background:"#000",borderRadius:8,overflow:"hidden",border:"1px solid #252538",marginBottom:10}}>
+        <div style={{position:"relative",paddingBottom:"56.25%",height:0}}>
+          <iframe
+            key={videoId}
+            src={embedUrl}
+            title="Power Hour"
+            frameBorder="0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+            style={{position:"absolute",top:0,left:0,width:"100%",height:"100%"}}
+          />
+        </div>
+        <button onClick={toggleFullscreen} style={{position:"absolute",top:8,right:8,background:"rgba(0,0,0,0.7)",border:"1px solid #f5c842",color:"#f5c842",borderRadius:4,cursor:"pointer",fontFamily:"'Bebas Neue',sans-serif",fontSize:"0.72rem",letterSpacing:1,padding:"3px 8px",zIndex:10}}>
+          {isFullscreen ? "EXIT ⊠" : "FULLSCREEN ⛶"}
+        </button>
+      </div>
+
+      {/* URL INPUT */}
+      {editing ? (
+        <div style={{display:"flex",gap:6,marginBottom:8}}>
+          <input
+            value={inputVal}
+            onChange={e=>setInputVal(e.target.value)}
+            onKeyDown={e=>e.key==="Enter"&&saveUrl()}
+            placeholder="Paste YouTube URL here..."
+            autoFocus
+            style={{flex:1,background:"#0f0f1a",border:"1px solid #f5c842",borderRadius:4,padding:"7px 10px",color:"#e8e8f0",fontFamily:"Oswald,sans-serif",fontSize:"0.85rem"}}
+          />
+          <button onClick={saveUrl} style={{fontFamily:"'Bebas Neue',sans-serif",letterSpacing:2,padding:"7px 14px",background:"#f5c842",color:"#000",border:"none",borderRadius:4,cursor:"pointer",fontSize:"0.85rem"}}>SAVE</button>
+          {ytUrl && <button onClick={()=>setEditing(false)} style={{fontFamily:"'Bebas Neue',sans-serif",padding:"7px 10px",background:"transparent",color:"#6a6a8a",border:"1px solid #252538",borderRadius:4,cursor:"pointer",fontSize:"0.85rem"}}>CANCEL</button>}
+        </div>
+      ) : (
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 10px",background:"#0f0f1a",borderRadius:6,border:"1px solid #252538",marginBottom:8}}>
+          <span style={{fontSize:"0.72rem",color:"#6a6a8a",fontFamily:"'Source Code Pro',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"75%"}}>
+            {ytUrl || "No video set"}
+          </span>
+          <button onClick={()=>{setInputVal(ytUrl);setEditing(true);}} style={{fontFamily:"'Bebas Neue',sans-serif",letterSpacing:1,padding:"3px 8px",background:"transparent",color:"#f5c842",border:"1px solid #f5c842",borderRadius:3,cursor:"pointer",fontSize:"0.72rem",flexShrink:0}}>
+            {ytUrl ? "SWAP" : "ADD LINK"}
+          </button>
+        </div>
+      )}
+
+      <div style={{padding:"7px 10px",background:"#0f0f1a",borderRadius:6,border:"1px solid #252538",fontSize:"0.7rem",color:"#6a6a8a"}}>
+        <span style={{color:"#f5c842",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:1}}>HOW TO: </span>
+        Friend uploads video to YouTube as <span style={{color:"#e8e8f0"}}>Unlisted</span> → pastes the link here → hit FULLSCREEN and share screen to TV
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
 // MAIN APP
 // ============================================================
 export default function App() {
@@ -1076,8 +1205,8 @@ export default function App() {
             <div style={card}><PhotoStrip toast={showToast} /></div>
             <div style={card}>
               <div style={{display:"flex",gap:3,background:"#0f0f1a",padding:3,borderRadius:7,border:"1px solid #252538",marginBottom:12}}>
-                {["scores","boosts","slips"].map(t=>(
-                  <button key={t} onClick={()=>setTab(t)} style={{flex:1,padding:"6px 4px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:1,fontSize:"0.85rem",background:tab===t?"#161624":"transparent",border:"none",color:tab===t?"#f5c842":"#6a6a8a",cursor:"pointer",borderRadius:5}}>{t.toUpperCase()}</button>
+                {["scores","boosts","slips","halftime"].map(t=>(
+                  <button key={t} onClick={()=>setTab(t)} style={{flex:1,padding:"6px 4px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:1,fontSize:"0.85rem",background:tab===t?"#161624":"transparent",border:"none",color:tab===t?"#f5c842":"#6a6a8a",cursor:"pointer",borderRadius:5}}>{{scores:"SCORES",boosts:"BOOSTS",slips:"SLIPS",halftime:"🎉 HALFTIME"}[t]||t.toUpperCase()}</button>
                 ))}
               </div>
 
@@ -1123,6 +1252,7 @@ export default function App() {
               )}
 
               {tab==="slips" && <SlipPanel toast={showToast} onBetAdded={handleBetUpdate} />}
+              {tab==="halftime" && <HalftimePlayer toast={showToast} />}
             </div>
           </div>
 
