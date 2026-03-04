@@ -227,56 +227,25 @@ function PhotoStrip({ toast }) {
         </div>
       )}
 
-      {/* THUMBNAIL STRIP — only renders THUMB_WINDOW photos at a time */}
-      <div style={{display:"flex",gap:8,paddingBottom:6,alignItems:"center"}}>
-        {total > THUMB_WINDOW && (
-          <button onClick={prev} style={{background:"none",border:"1px solid #252538",color:"#f5c842",borderRadius:4,cursor:"pointer",padding:"4px 8px",flexShrink:0,fontSize:"0.9rem"}}>‹</button>
-        )}
+      {/* SCROLLABLE THUMBNAIL STRIP — bigger thumbs, auto-rotates, no featured photo */}
+      <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:6}}>
         {thumbIndices.map(idx => {
           const p = photos[idx];
           if (!p) return null;
           return (
-            <div key={p.id} onClick={()=>setSlideIdx(idx)} style={{flexShrink:0,borderRadius:6,overflow:"hidden",border:`2px solid ${idx===slideIdx?"#f5c842":"#252538"}`,width:100,cursor:"pointer",transition:"border-color 0.3s"}}>
+            <div key={p.id} onClick={()=>setSlideIdx(idx)} style={{flexShrink:0,borderRadius:6,overflow:"hidden",border:`2px solid ${idx===slideIdx?"#f5c842":"#252538"}`,width:130,cursor:"pointer",transition:"border-color 0.3s"}}>
               {p.url
-                ? <img src={p.url} alt={p.label} style={{width:100,height:100,objectFit:"cover"}} loading="lazy" />
-                : <div style={{width:100,height:100,background:p.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"2.2rem"}}>{p.emoji}</div>
+                ? <img src={p.url} alt={p.label} style={{width:130,height:130,objectFit:"cover"}} loading="lazy" />
+                : <div style={{width:130,height:130,background:p.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"3rem"}}>{p.emoji}</div>
               }
-              <div style={{padding:"3px 5px",background:"#0f0f1a"}}>
-                <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"0.68rem",color:"#f5c842",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.label}</div>
+              <div style={{padding:"4px 6px",background:"#0f0f1a"}}>
+                <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"0.72rem",color:"#f5c842",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.label}</div>
+                <div style={{fontSize:"0.62rem",color:"#6a6a8a",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.caption}</div>
               </div>
             </div>
           );
         })}
-        {total > THUMB_WINDOW && (
-          <button onClick={next} style={{background:"none",border:"1px solid #252538",color:"#f5c842",borderRadius:4,cursor:"pointer",padding:"4px 8px",flexShrink:0,fontSize:"0.9rem"}}>›</button>
-        )}
       </div>
-
-      {/* FEATURED SLIDESHOW — only renders current photo */}
-      {current && (
-        <div style={{marginTop:10,borderRadius:8,overflow:"hidden",border:"2px solid #f5c842",position:"relative",maxHeight:220}}>
-          {current.url
-            ? <img src={current.url} alt={current.label} style={{width:"100%",maxHeight:220,objectFit:"cover"}} loading="lazy" />
-            : <div style={{height:180,background:current.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"5rem"}}>{current.emoji}</div>
-          }
-          <div style={{position:"absolute",bottom:0,left:0,right:0,background:"linear-gradient(transparent,rgba(0,0,0,0.8))",padding:"20px 12px 8px"}}>
-            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"1rem",color:"#f5c842",letterSpacing:2}}>{current.label}</div>
-            <div style={{fontSize:"0.75rem",color:"#e8e8f0"}}>{current.caption}</div>
-          </div>
-          {/* Prev/Next arrows */}
-          <button onClick={prev} style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",background:"rgba(0,0,0,0.6)",border:"none",color:"#f5c842",borderRadius:"50%",width:32,height:32,cursor:"pointer",fontSize:"1.1rem",display:"flex",alignItems:"center",justifyContent:"center"}}>‹</button>
-          <button onClick={next} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"rgba(0,0,0,0.6)",border:"none",color:"#f5c842",borderRadius:"50%",width:32,height:32,cursor:"pointer",fontSize:"1.1rem",display:"flex",alignItems:"center",justifyContent:"center"}}>›</button>
-          {/* Only show max 7 dots regardless of total */}
-          <div style={{position:"absolute",top:8,right:8,display:"flex",gap:3}}>
-            {total <= 7
-              ? Array.from({length:total},(_,i)=>(
-                  <div key={i} onClick={()=>setSlideIdx(i)} style={{width:7,height:7,borderRadius:"50%",background:i===slideIdx?"#f5c842":"rgba(255,255,255,0.35)",cursor:"pointer"}} />
-                ))
-              : <div style={{fontFamily:"'Source Code Pro',monospace",fontSize:"0.68rem",color:"rgba(255,255,255,0.7)",background:"rgba(0,0,0,0.5)",padding:"2px 6px",borderRadius:3}}>{slideIdx+1}/{total}</div>
-            }
-          </div>
-        </div>
-      )}
     </div>
   );
 }
