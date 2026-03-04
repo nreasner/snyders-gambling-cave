@@ -176,12 +176,15 @@ function IndianaFlash({ onDone }) {
 // ============================================================
 // RAZZ BANNER — big visible banner across the top when triggered
 // ============================================================
-function RazzBanner({ msg, onClose }) {
-  useEffect(() => { const t = setTimeout(onClose, 5000); return () => clearTimeout(t); }, [onClose]);
+function RazzBanner({ banner, onClose }) {
+  const { msg, type } = banner;
+  const isHype = type === "hype";
+  const bg = isHype ? "linear-gradient(135deg,#00c853,#1b5e20)" : "linear-gradient(135deg,#ff1744,#b71c1c)";
+  const glow = isHype ? "rgba(0,200,83,0.5)" : "rgba(255,23,68,0.5)";
+  useEffect(() => { const t = setTimeout(onClose, 3000); return () => clearTimeout(t); }, [onClose]);
   return (
-    <div onClick={onClose} style={{position:"fixed",top:0,left:0,right:0,zIndex:250,background:"linear-gradient(135deg,#ff1744,#b71c1c)",padding:"14px 20px",textAlign:"center",cursor:"pointer",boxShadow:"0 4px 30px rgba(255,23,68,0.5)"}}>
-      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"1.8rem",letterSpacing:6,color:"#fff",textShadow:"0 0 20px rgba(255,255,255,0.5)"}}>{msg}</div>
-      <div style={{fontSize:"0.7rem",color:"rgba(255,255,255,0.6)",marginTop:2}}>tap to dismiss</div>
+    <div onClick={onClose} style={{position:"fixed",top:0,left:0,right:0,zIndex:250,background:bg,padding:"16px 20px",textAlign:"center",cursor:"pointer",boxShadow:`0 4px 30px ${glow}`}}>
+      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"2rem",letterSpacing:6,color:"#fff",textShadow:`0 0 20px rgba(255,255,255,0.6)`}}>{msg}</div>
     </div>
   );
 }
@@ -1094,36 +1097,38 @@ export default function App() {
 
   const showToast = (msg) => setToast(msg);
 
-  const fireRazz = (msg) => {
-    setRazzBanner(msg);
-    // also play a quick buzz sound
-    try {
-      const ctx = new (window.AudioContext||window.webkitAudioContext)();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain); gain.connect(ctx.destination);
-      osc.type = "square"; osc.frequency.value = 80;
-      gain.gain.setValueAtTime(0.15, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+0.4);
-      osc.start(ctx.currentTime); osc.stop(ctx.currentTime+0.4);
-    } catch {}
+  const fireRazz = (msg, type="razz") => {
+    setRazzBanner({ msg, type });
   };
 
   const playAirhorn = () => {
     try {
       const ctx = new (window.AudioContext||window.webkitAudioContext)();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain); gain.connect(ctx.destination);
-      osc.type = "sawtooth";
-      osc.frequency.setValueAtTime(300, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime+0.08);
-      osc.frequency.exponentialRampToValueAtTime(200, ctx.currentTime+0.6);
-      gain.gain.setValueAtTime(0.6, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime+1.2);
-      osc.start(ctx.currentTime); osc.stop(ctx.currentTime+1.2);
-      setWinMsg("AIRHORN DEPLOYED 🔊");
-    } catch { showToast("AIRHORN FIRED 🔊"); }
+      const t = ctx.currentTime;
+      // Layer 3 detuned sawtooth oscillators for a thick horn blast
+      [[233, 0], [350, 7], [466, -5]].forEach(([freq, detune]) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        const dist = ctx.createWaveShaper();
+        // soft clip distortion curve for that honky edge
+        const curve = new Float32Array(256);
+        for (let i = 0; i < 256; i++) { const x = (i * 2) / 256 - 1; curve[i] = (Math.PI + 200) * x / (Math.PI + 200 * Math.abs(x)); }
+        dist.curve = curve;
+        osc.type = "sawtooth";
+        osc.frequency.value = freq;
+        osc.detune.value = detune;
+        osc.connect(dist); dist.connect(gain); gain.connect(ctx.destination);
+        // sharp attack, long sustain, tail off
+        gain.gain.setValueAtTime(0, t);
+        gain.gain.linearRampToValueAtTime(0.35, t + 0.015);
+        gain.gain.setValueAtTime(0.35, t + 0.3);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 1.8);
+        // slight pitch drop like a real horn
+        osc.frequency.setValueAtTime(freq * 1.04, t);
+        osc.frequency.exponentialRampToValueAtTime(freq, t + 0.05);
+        osc.start(t); osc.stop(t + 1.8);
+      });
+    } catch {}
   };
 
   const putToVote = (g) => {
@@ -1298,7 +1303,7 @@ export default function App() {
             </div>
             <div style={{padding:"10px 12px"}}>
               <button onClick={playAirhorn} style={{width:"100%",padding:16,fontFamily:"'Bebas Neue',sans-serif",letterSpacing:4,fontSize:"1.6rem",background:"linear-gradient(135deg,#ff6f00,#ff1744)",color:"#fff",border:"none",borderRadius:8,cursor:"pointer",marginBottom:8}}>AIR HORN</button>
-              <button onClick={()=>setShowRandy(true)} style={{width:"100%",padding:8,fontFamily:"'Bebas Neue',sans-serif",letterSpacing:2,fontSize:"0.9rem",background:"#1a0a0a",color:"#ff1744",border:"1px solid #ff1744",borderRadius:6,cursor:"pointer",marginBottom:10}}>PURDUE LOSES (TRIGGER)</button>
+
               <div style={{display:"flex",gap:4,marginBottom:8}}>
                 {["razz","hype"].map(t=>(
                   <button key={t} onClick={()=>setCmdTab(t)} style={{flex:1,padding:6,fontFamily:"'Bebas Neue',sans-serif",fontSize:"0.85rem",background:cmdTab===t?"#161624":"transparent",border:"none",color:cmdTab===t?"#f5c842":"#6a6a8a",cursor:"pointer",borderRadius:5}}>{t.toUpperCase()}</button>
@@ -1307,7 +1312,7 @@ export default function App() {
               <div style={{maxHeight:260,overflowY:"auto"}}>
                 {(cmdTab==="razz"?RAZZ:HYPE).map((msg,i)=>(
                   <button key={i} className="razz-btn" style={{background:`hsl(${i*36+(cmdTab==="hype"?120:0)},55%,20%)`}}
-                    onClick={()=>{ cmdTab==="razz" ? fireRazz(msg) : showToast(msg); }}>
+                    onClick={()=>fireRazz(msg, cmdTab)}>
                     {msg}
                   </button>
                 ))}
@@ -1318,7 +1323,7 @@ export default function App() {
         {!cmdOpen && <button className="fab" onClick={()=>setCmdOpen(true)}>📱</button>}
 
         {/* OVERLAYS */}
-        {razzBanner && <RazzBanner msg={razzBanner} onClose={()=>setRazzBanner(null)} />}
+        {razzBanner && <RazzBanner banner={razzBanner} onClose={()=>setRazzBanner(null)} />}
         {toast && <Toast msg={toast} onClose={()=>setToast(null)} />}
         {winMsg && <WinOverlay msg={winMsg} onClose={()=>setWinMsg(null)} />}
         {showRandy && <RandyOverlay onClose={()=>setShowRandy(false)} />}
