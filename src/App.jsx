@@ -143,7 +143,10 @@ function Countdown({ target }) {
 
 // ============================================================
 // PHOTO STRIP WITH SLIDESHOW + QR + MULTI-UPLOAD
+// Handles 100+ photos by only rendering 5 thumbnails at a time
 // ============================================================
+const THUMB_WINDOW = 5; // how many thumbnails to show at once
+
 function PhotoStrip({ toast }) {
   const DEFAULTS = [
     { id:"p1", emoji:"🤵", label:"THE DADCHELOR", caption:"Last day of freedom", color:"#1a0e05" },
@@ -154,30 +157,58 @@ function PhotoStrip({ toast }) {
   const [slideIdx, setSlideIdx] = useState(0);
   const [showQR, setShowQR] = useState(false);
   const ref = useRef();
+  const total = photos.length;
 
+  // Auto-advance slideshow
   useEffect(() => {
-    if (photos.length <= 1) return;
-    const t = setInterval(() => setSlideIdx(i => (i + 1) % photos.length), 4000);
+    if (total <= 1) return;
+    const t = setInterval(() => setSlideIdx(i => (i + 1) % total), 4000);
     return () => clearInterval(t);
-  }, [photos.length]);
+  }, [total]);
 
+  // Only keep blob URLs for visible window + current — revoke the rest to free memory
   const handleFiles = (e) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
-    const newPhotos = files.map(f => ({ id:"u"+Date.now()+Math.random(), url:URL.createObjectURL(f), label:"NEW DROP", caption:"Fresh from the cave" }));
+    const newPhotos = files.map(f => ({
+      id: "u" + Date.now() + Math.random(),
+      url: URL.createObjectURL(f),
+      label: "NEW DROP",
+      caption: "Fresh from the cave",
+    }));
     setPhotos(prev => [...newPhotos, ...prev]);
-    toast(`${files.length} photo${files.length>1?"s":""} added!`);
+    setSlideIdx(0);
+    toast(`${files.length} photo${files.length > 1 ? "s" : ""} added!`);
+    // reset file input so same files can be re-selected
+    e.target.value = "";
   };
 
+  const prev = () => setSlideIdx(i => (i - 1 + total) % total);
+  const next = () => setSlideIdx(i => (i + 1) % total);
+
+  // Compute which thumbnail indices to show (window around current)
+  const thumbIndices = (() => {
+    if (total <= THUMB_WINDOW) return Array.from({length: total}, (_, i) => i);
+    const half = Math.floor(THUMB_WINDOW / 2);
+    let start = slideIdx - half;
+    let end = slideIdx + half;
+    if (start < 0) { end -= start; start = 0; }
+    if (end >= total) { start -= (end - total + 1); end = total - 1; }
+    start = Math.max(0, start);
+    return Array.from({length: Math.min(THUMB_WINDOW, total)}, (_, i) => start + i);
+  })();
+
+  const current = photos[slideIdx];
   const siteUrl = "https://www.snydersgamblingcave.com";
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(siteUrl)}&bgcolor=07070f&color=f5c842&margin=10`;
-
-  const current = photos[slideIdx] || photos[0];
 
   return (
     <div>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-        <div style={{fontFamily:"'Bebas Neue',sans-serif",letterSpacing:3,fontSize:"1.1rem",color:"#f5c842",borderBottom:"1px solid #252538",paddingBottom:8,flex:1}}>DADCHELOR WALL OF SHAME</div>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",letterSpacing:3,fontSize:"1.1rem",color:"#f5c842",borderBottom:"1px solid #252538",paddingBottom:8,flex:1}}>
+          DADCHELOR WALL OF SHAME
+          {total > 3 && <span style={{fontSize:"0.7rem",color:"#6a6a8a",marginLeft:8,letterSpacing:1}}>{slideIdx+1} / {total}</span>}
+        </div>
         <div style={{display:"flex",gap:6,marginLeft:10}}>
           <button onClick={()=>setShowQR(!showQR)} style={{fontFamily:"'Bebas Neue',sans-serif",letterSpacing:1,padding:"4px 10px",background:"transparent",color:"#2979ff",border:"1px solid #2979ff",borderRadius:4,cursor:"pointer",fontSize:"0.78rem"}}>QR</button>
           <button onClick={()=>ref.current?.click()} style={{fontFamily:"'Bebas Neue',sans-serif",letterSpacing:1,padding:"4px 10px",background:"transparent",color:"#f5c842",border:"1px solid #f5c842",borderRadius:4,cursor:"pointer",fontSize:"0.78rem"}}>+ PHOTOS</button>
@@ -196,36 +227,53 @@ function PhotoStrip({ toast }) {
         </div>
       )}
 
-      <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:6}}>
-        {photos.map((p, idx) => (
-          <div key={p.id} onClick={()=>setSlideIdx(idx)} style={{flexShrink:0,borderRadius:6,overflow:"hidden",border:`2px solid ${idx===slideIdx?"#f5c842":"#252538"}`,width:110,cursor:"pointer",transition:"border-color 0.3s"}}>
-            {p.url
-              ? <img src={p.url} alt={p.label} style={{width:110,height:110,objectFit:"cover"}} />
-              : <div style={{width:110,height:110,background:p.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"2.5rem"}}>{p.emoji}</div>
-            }
-            <div style={{padding:"4px 6px",background:"#0f0f1a"}}>
-              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"0.72rem",color:"#f5c842"}}>{p.label}</div>
-              <div style={{fontSize:"0.62rem",color:"#6a6a8a"}}>{p.caption}</div>
+      {/* THUMBNAIL STRIP — only renders THUMB_WINDOW photos at a time */}
+      <div style={{display:"flex",gap:8,paddingBottom:6,alignItems:"center"}}>
+        {total > THUMB_WINDOW && (
+          <button onClick={prev} style={{background:"none",border:"1px solid #252538",color:"#f5c842",borderRadius:4,cursor:"pointer",padding:"4px 8px",flexShrink:0,fontSize:"0.9rem"}}>‹</button>
+        )}
+        {thumbIndices.map(idx => {
+          const p = photos[idx];
+          if (!p) return null;
+          return (
+            <div key={p.id} onClick={()=>setSlideIdx(idx)} style={{flexShrink:0,borderRadius:6,overflow:"hidden",border:`2px solid ${idx===slideIdx?"#f5c842":"#252538"}`,width:100,cursor:"pointer",transition:"border-color 0.3s"}}>
+              {p.url
+                ? <img src={p.url} alt={p.label} style={{width:100,height:100,objectFit:"cover"}} loading="lazy" />
+                : <div style={{width:100,height:100,background:p.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"2.2rem"}}>{p.emoji}</div>
+              }
+              <div style={{padding:"3px 5px",background:"#0f0f1a"}}>
+                <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"0.68rem",color:"#f5c842",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.label}</div>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
+        {total > THUMB_WINDOW && (
+          <button onClick={next} style={{background:"none",border:"1px solid #252538",color:"#f5c842",borderRadius:4,cursor:"pointer",padding:"4px 8px",flexShrink:0,fontSize:"0.9rem"}}>›</button>
+        )}
       </div>
 
-      {/* FEATURED SLIDESHOW PHOTO */}
+      {/* FEATURED SLIDESHOW — only renders current photo */}
       {current && (
         <div style={{marginTop:10,borderRadius:8,overflow:"hidden",border:"2px solid #f5c842",position:"relative",maxHeight:220}}>
           {current.url
-            ? <img src={current.url} alt={current.label} style={{width:"100%",maxHeight:220,objectFit:"cover"}} />
+            ? <img src={current.url} alt={current.label} style={{width:"100%",maxHeight:220,objectFit:"cover"}} loading="lazy" />
             : <div style={{height:180,background:current.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"5rem"}}>{current.emoji}</div>
           }
           <div style={{position:"absolute",bottom:0,left:0,right:0,background:"linear-gradient(transparent,rgba(0,0,0,0.8))",padding:"20px 12px 8px"}}>
             <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"1rem",color:"#f5c842",letterSpacing:2}}>{current.label}</div>
             <div style={{fontSize:"0.75rem",color:"#e8e8f0"}}>{current.caption}</div>
           </div>
-          <div style={{position:"absolute",top:8,right:8,display:"flex",gap:4}}>
-            {photos.map((_,i)=>(
-              <div key={i} onClick={()=>setSlideIdx(i)} style={{width:8,height:8,borderRadius:"50%",background:i===slideIdx?"#f5c842":"rgba(255,255,255,0.4)",cursor:"pointer"}} />
-            ))}
+          {/* Prev/Next arrows */}
+          <button onClick={prev} style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",background:"rgba(0,0,0,0.6)",border:"none",color:"#f5c842",borderRadius:"50%",width:32,height:32,cursor:"pointer",fontSize:"1.1rem",display:"flex",alignItems:"center",justifyContent:"center"}}>‹</button>
+          <button onClick={next} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"rgba(0,0,0,0.6)",border:"none",color:"#f5c842",borderRadius:"50%",width:32,height:32,cursor:"pointer",fontSize:"1.1rem",display:"flex",alignItems:"center",justifyContent:"center"}}>›</button>
+          {/* Only show max 7 dots regardless of total */}
+          <div style={{position:"absolute",top:8,right:8,display:"flex",gap:3}}>
+            {total <= 7
+              ? Array.from({length:total},(_,i)=>(
+                  <div key={i} onClick={()=>setSlideIdx(i)} style={{width:7,height:7,borderRadius:"50%",background:i===slideIdx?"#f5c842":"rgba(255,255,255,0.35)",cursor:"pointer"}} />
+                ))
+              : <div style={{fontFamily:"'Source Code Pro',monospace",fontSize:"0.68rem",color:"rgba(255,255,255,0.7)",background:"rgba(0,0,0,0.5)",padding:"2px 6px",borderRadius:3}}>{slideIdx+1}/{total}</div>
+            }
           </div>
         </div>
       )}
