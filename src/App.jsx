@@ -628,34 +628,224 @@ function Ledger() {
 }
 
 // ============================================================
-// SLIP PANEL
+// AI SLIP READER — reads bet details from photo using Claude vision
 // ============================================================
-function SlipPanel({ toast }) {
+async function readSlipWithAI(base64Image) {
+  costTracker.addOracle(800, 300); // estimate tokens for vision call
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 400,
+      system: 'You are reading a sports betting slip image. Extract the bet details and return ONLY valid JSON with no extra text: {"pick":"team or bet description","odds":"e.g. -110 or +150","amount":"dollar amount wagered e.g. 25","payout":"potential payout e.g. 47.50","book":"sportsbook name"}. If you cannot read a field clearly use "?".',
+      messages: [{
+        role: "user",
+        content: [
+          { type: "image", source: { type: "base64", media_type: "image/jpeg", data: base64Image } },
+          { type: "text", text: "Read this betting slip and extract the details as JSON." }
+        ]
+      }]
+    }),
+  });
+  const data = await res.json();
+  const raw = data.content?.[0]?.text || "{}";
+  try { return JSON.parse(raw.replace(/```json|```/g, "").trim()); }
+  catch { return { pick: "Unreadable slip", odds: "?", amount: "?", payout: "?", book: "?" }; }
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(",")[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// ============================================================
+// SLIP PANEL + BET TRACKER
+// ============================================================
+function SlipPanel({ toast, onBetAdded }) {
   const [slips, setSlips] = useState([]);
+  const [nameInput, setNameInput] = useState("");
+  const [pendingName, setPendingName] = useState(""); // name being entered for current upload
+  const [showNamePrompt, setShowNamePrompt] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState([]);
   const ref = useRef();
+
+  const handleFiles = (e) => {
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
+    setPendingFiles(files);
+    setShowNamePrompt(true);
+    e.target.value = "";
+  };
+
+  const confirmUpload = async () => {
+    const name = pendingName.trim() || "Anonymous";
+    setShowNamePrompt(false);
+    setPendingName("");
+
+    for (const file of pendingFiles) {
+      const tempId = "s" + Date.now() + Math.random();
+      // Add placeholder immediately
+      setSlips(prev => [{
+        id: tempId, url: URL.createObjectURL(file),
+        name, pick: "Reading slip...", odds: "...", amount: "...",
+        payout: "...", book: "...", status: "pending", time: new Date().toLocaleTimeString()
+      }, ...prev]);
+
+      try {
+        const b64 = await fileToBase64(file);
+        const details = await readSlipWithAI(b64);
+        setSlips(prev => prev.map(s => s.id === tempId
+          ? { ...s, ...details, status: "open" }
+          : s
+        ));
+        if (onBetAdded) onBetAdded({ id: tempId, name, ...details, status: "open" });
+        toast(`Slip read! ${details.pick || "Bet"} added to tracker`);
+      } catch {
+        setSlips(prev => prev.map(s => s.id === tempId
+          ? { ...s, pick: "Could not read slip", status: "open" }
+          : s
+        ));
+        toast("Slip uploaded — could not auto-read, fill in manually");
+      }
+    }
+    setPendingFiles([]);
+  };
+
+  const setStatus = (id, status) => {
+    setSlips(prev => prev.map(s => s.id === id ? { ...s, status } : s));
+    if (onBetAdded) onBetAdded(null, id, status); // signal leaderboard update
+    if (status === "won") toast("CASH IT! 🤑💰");
+    if (status === "lost") toast("Tough break. Next one. 💸");
+  };
+
+  const statusColor = { open:"#f5c842", won:"#00e676", lost:"#ff1744", push:"#6a6a8a" };
+  const statusLabel = { open:"PENDING", won:"WON ✓", lost:"LOST ✗", push:"PUSH" };
+
   return (
     <div>
-      <div style={{fontFamily:"'Bebas Neue',sans-serif",letterSpacing:3,fontSize:"1.1rem",color:"#f5c842",borderBottom:"1px solid #252538",paddingBottom:8,marginBottom:10}}>BET SLIP WALL</div>
-      <div onClick={()=>ref.current?.click()} style={{border:"2px dashed #252538",borderRadius:8,padding:16,textAlign:"center",cursor:"pointer"}}>
-        <div style={{fontSize:"1.8rem",marginBottom:4}}>📸</div>
+      <div style={{fontFamily:"'Bebas Neue',sans-serif",letterSpacing:3,fontSize:"1.1rem",color:"#f5c842",borderBottom:"1px solid #252538",paddingBottom:8,marginBottom:10}}>BET SLIP TRACKER</div>
+
+      {/* NAME PROMPT MODAL */}
+      {showNamePrompt && (
+        <div style={{background:"#0f0f1a",border:"1px solid #f5c842",borderRadius:8,padding:14,marginBottom:12}}>
+          <div style={{fontFamily:"'Bebas Neue',sans-serif",letterSpacing:2,color:"#f5c842",marginBottom:8}}>WHO'S SLIP IS THIS?</div>
+          <input
+            value={pendingName} onChange={e=>setPendingName(e.target.value)}
+            onKeyDown={e=>e.key==="Enter"&&confirmUpload()}
+            placeholder="Enter your name..."
+            autoFocus
+            style={{width:"100%",background:"#161624",border:"1px solid #252538",borderRadius:4,padding:"7px 10px",color:"#e8e8f0",fontFamily:"Oswald,sans-serif",fontSize:"0.9rem",marginBottom:8}}
+          />
+          <div style={{display:"flex",gap:6}}>
+            <button onClick={confirmUpload} style={{flex:1,padding:"7px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:2,background:"#f5c842",color:"#000",border:"none",borderRadius:4,cursor:"pointer",fontSize:"0.85rem"}}>READ MY SLIP 🔮</button>
+            <button onClick={()=>{setShowNamePrompt(false);setPendingFiles([]);}} style={{padding:"7px 12px",fontFamily:"'Bebas Neue',sans-serif",background:"transparent",color:"#6a6a8a",border:"1px solid #252538",borderRadius:4,cursor:"pointer",fontSize:"0.85rem"}}>CANCEL</button>
+          </div>
+        </div>
+      )}
+
+      <div onClick={()=>ref.current?.click()} style={{border:"2px dashed #252538",borderRadius:8,padding:14,textAlign:"center",cursor:"pointer",marginBottom:10}}>
+        <div style={{fontSize:"1.6rem",marginBottom:3}}>📸</div>
         <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"1rem",letterSpacing:2,color:"#f5c842"}}>UPLOAD YOUR SLIP</div>
-        <div style={{fontSize:"0.72rem",color:"#6a6a8a"}}>Tap to upload — multiple allowed</div>
-        <input ref={ref} type="file" accept="image/*" multiple style={{display:"none"}} onChange={e=>{
-          const files=Array.from(e.target.files);
-          setSlips(p=>[...files.map(f=>({id:Date.now()+Math.random(),url:URL.createObjectURL(f),time:new Date().toLocaleTimeString()})),...p]);
-          toast(`${files.length} slip${files.length>1?"s":""} uploaded!`);
-          e.target.value="";
-        }} />
+        <div style={{fontSize:"0.7rem",color:"#6a6a8a"}}>AI reads bet details automatically</div>
+        <input ref={ref} type="file" accept="image/*" multiple style={{display:"none"}} onChange={handleFiles} />
       </div>
-      <div style={{marginTop:10,maxHeight:300,overflowY:"auto"}}>
-        {!slips.length && <div style={{textAlign:"center",padding:16,color:"#6a6a8a",fontSize:"0.82rem"}}>No slips yet</div>}
-        {slips.map(s=>(
-          <div key={s.id} style={{background:"#0f0f1a",border:"1px solid #252538",borderRadius:6,padding:10,marginBottom:8}}>
-            <img src={s.url} alt="slip" style={{width:"100%",borderRadius:4,maxHeight:200,objectFit:"cover"}} />
-            <div style={{marginTop:5,fontSize:"0.68rem",color:"#6a6a8a"}}>Uploaded {s.time}</div>
+
+      <div style={{maxHeight:480,overflowY:"auto"}}>
+        {!slips.length && <div style={{textAlign:"center",padding:16,color:"#6a6a8a",fontSize:"0.82rem"}}>No slips yet — upload one above</div>}
+        {slips.map(s => (
+          <div key={s.id} style={{background:"#0f0f1a",border:`1px solid ${statusColor[s.status]||"#252538"}`,borderRadius:8,padding:10,marginBottom:10}}>
+            <div style={{display:"flex",gap:8,marginBottom:8}}>
+              <img src={s.url} alt="slip" style={{width:64,height:64,objectFit:"cover",borderRadius:4,flexShrink:0}} />
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:2}}>
+                  <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"0.85rem",color:"#f5c842",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:"60%"}}>{s.name}</div>
+                  <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"0.7rem",color:statusColor[s.status],letterSpacing:1,flexShrink:0}}>{statusLabel[s.status]}</span>
+                </div>
+                <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"0.82rem",color:s.pick==="Reading slip..."?"#6a6a8a":"#e8e8f0",marginBottom:2}}>{s.pick}</div>
+                <div style={{display:"flex",gap:10,fontSize:"0.7rem",color:"#6a6a8a"}}>
+                  <span>Odds: <span style={{color:"#00e676",fontFamily:"'Source Code Pro',monospace"}}>{s.odds}</span></span>
+                  <span>Bet: <span style={{color:"#f5c842",fontFamily:"'Source Code Pro',monospace"}}>${s.amount}</span></span>
+                  <span>To win: <span style={{color:"#00e676",fontFamily:"'Source Code Pro',monospace"}}>${s.payout}</span></span>
+                </div>
+              </div>
+            </div>
+            {s.status === "open" && s.pick !== "Reading slip..." && (
+              <div style={{display:"flex",gap:5}}>
+                <button onClick={()=>setStatus(s.id,"won")} style={{flex:2,padding:"6px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:2,background:"#00e676",color:"#000",border:"none",borderRadius:4,cursor:"pointer",fontSize:"0.82rem"}}>WIN 🤑</button>
+                <button onClick={()=>setStatus(s.id,"lost")} style={{flex:2,padding:"6px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:2,background:"#ff1744",color:"#fff",border:"none",borderRadius:4,cursor:"pointer",fontSize:"0.82rem"}}>LOSS 💸</button>
+                <button onClick={()=>setStatus(s.id,"push")} style={{flex:1,padding:"6px",fontFamily:"'Bebas Neue',sans-serif",background:"#252538",color:"#6a6a8a",border:"none",borderRadius:4,cursor:"pointer",fontSize:"0.75rem"}}>PUSH</button>
+              </div>
+            )}
+            {s.status !== "open" && (
+              <button onClick={()=>setStatus(s.id,"open")} style={{width:"100%",padding:"4px",fontFamily:"'Bebas Neue',sans-serif",background:"transparent",color:"#6a6a8a",border:"1px solid #252538",borderRadius:4,cursor:"pointer",fontSize:"0.72rem",letterSpacing:1}}>UNDO</button>
+            )}
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// ============================================================
+// LEADERBOARD — live crew standings
+// ============================================================
+function Leaderboard({ bets }) {
+  // Roll up bets by person
+  const players = {};
+  bets.forEach(b => {
+    if (!players[b.name]) players[b.name] = { name:b.name, bets:0, wins:0, losses:0, push:0, net:0 };
+    const p = players[b.name];
+    p.bets++;
+    const amt = parseFloat(b.amount) || 0;
+    const payout = parseFloat(b.payout) || 0;
+    if (b.status === "won")  { p.wins++;   p.net += payout; }
+    if (b.status === "lost") { p.losses++; p.net -= amt; }
+    if (b.status === "push") { p.push++; }
+  });
+
+  const sorted = Object.values(players).sort((a,b) => b.net - a.net);
+  const medals = ["🥇","🥈","🥉"];
+
+  if (!sorted.length) return (
+    <div>
+      <div style={{fontFamily:"'Bebas Neue',sans-serif",letterSpacing:3,fontSize:"1.1rem",color:"#f5c842",borderBottom:"1px solid #252538",paddingBottom:8,marginBottom:10}}>CREW LEADERBOARD</div>
+      <div style={{textAlign:"center",padding:20,color:"#6a6a8a",fontSize:"0.82rem"}}>Upload slips to start the leaderboard 🏆</div>
+    </div>
+  );
+
+  const best = sorted[0];
+  const worst = sorted[sorted.length-1];
+
+  return (
+    <div>
+      <div style={{fontFamily:"'Bebas Neue',sans-serif",letterSpacing:3,fontSize:"1.1rem",color:"#f5c842",borderBottom:"1px solid #252538",paddingBottom:8,marginBottom:10}}>CREW LEADERBOARD</div>
+      {sorted.map((p, i) => {
+        const netColor = p.net > 0 ? "#00e676" : p.net < 0 ? "#ff1744" : "#6a6a8a";
+        const netStr = `${p.net >= 0 ? "+" : ""}$${Math.abs(p.net).toFixed(2)}`;
+        const isLeader = i === 0 && p.net > 0;
+        const isDonkey = i === sorted.length - 1 && sorted.length > 1 && p.net < 0;
+        return (
+          <div key={p.name} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",borderRadius:6,marginBottom:6,background:isLeader?"rgba(245,200,66,0.08)":"#0f0f1a",border:`1px solid ${isLeader?"rgba(245,200,66,0.4)":isDonkey?"rgba(255,23,68,0.3)":"#252538"}`}}>
+            <div style={{fontSize:"1.1rem",width:24,textAlign:"center"}}>{medals[i] || (isDonkey?"🫏":"")}</div>
+            <div style={{flex:1}}>
+              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"0.9rem",color:isLeader?"#f5c842":"#e8e8f0"}}>{p.name}{isLeader?" 👑":""}{isDonkey?" 💀":""}</div>
+              <div style={{fontSize:"0.65rem",color:"#6a6a8a"}}>{p.bets} bets • {p.wins}W-{p.losses}L{p.push?`-${p.push}P`:""}</div>
+            </div>
+            <div style={{fontFamily:"'Source Code Pro',monospace",fontWeight:700,fontSize:"0.95rem",color:netColor}}>{netStr}</div>
+          </div>
+        );
+      })}
+      {sorted.length > 1 && (
+        <div style={{marginTop:8,padding:"6px 10px",background:"#0a0a14",borderRadius:6,fontSize:"0.7rem",color:"#6a6a8a",display:"flex",justifyContent:"space-between"}}>
+          <span>🔥 Leading: <span style={{color:"#f5c842"}}>{best.name}</span></span>
+          <span>💀 Bleeding: <span style={{color:"#ff1744"}}>{worst.name}</span></span>
+        </div>
+      )}
     </div>
   );
 }
@@ -675,10 +865,22 @@ export default function App() {
   const [showIndiana, setShowIndiana] = useState(false);
   const [selectedGame, setSelectedGame] = useState(null);
   const [time, setTime] = useState(new Date().toLocaleTimeString());
+  const [bets, setBets] = useState([]); // all uploaded bets across crew
   const { games, lastUpdate, error, refresh } = useOddsAPI(isLive);
   const prevGamesRef = useRef([]);
   const indianaTimerRef = useRef(null);
   const addVoteRef = useRef(null); // ref so GameDetail can call VotePanel.addSingle
+
+  // Called by SlipPanel when a bet is added or status changes
+  const handleBetUpdate = (newBet, updateId, newStatus) => {
+    if (newBet) {
+      setBets(prev => [newBet, ...prev.filter(b => b.id !== newBet.id)]);
+    } else if (updateId && newStatus) {
+      setBets(prev => prev.map(b => b.id === updateId ? { ...b, status: newStatus } : b));
+      // fire airhorn on win
+      if (newStatus === "won") setWinMsg("BET CASHED! 💰🎉");
+    }
+  };
 
   useEffect(() => {
     const t = setInterval(() => setTime(new Date().toLocaleTimeString()), 1000);
@@ -704,7 +906,7 @@ export default function App() {
   useEffect(() => {
     if (isLive) {
       const schedule = () => {
-        indianaTimerRef.current = setTimeout(() => { setShowIndiana(true); schedule(); }, (Math.random()*3+4)*60*1000);
+        indianaTimerRef.current = setTimeout(() => { setShowIndiana(true); schedule(); }, (Math.random()*20+50)*60*1000);
       };
       schedule();
     } else clearTimeout(indianaTimerRef.current);
@@ -870,7 +1072,7 @@ export default function App() {
                 </div>
               )}
 
-              {tab==="slips" && <SlipPanel toast={showToast} />}
+              {tab==="slips" && <SlipPanel toast={showToast} onBetAdded={handleBetUpdate} />}
             </div>
           </div>
 
@@ -878,10 +1080,12 @@ export default function App() {
           <div>
             <div style={card}><VotePanel toast={showToast} onAddVote={addVoteRef} /></div>
             <div style={card}><OraclePanel isLive={isLive} toast={showToast} games={games} /></div>
+            <div style={{...card, display:"none"}} className="leaderboard-mobile"><Leaderboard bets={bets} /></div>
           </div>
 
           {/* RIGHT */}
           <div className="right-col">
+            <div style={card}><Leaderboard bets={bets} /></div>
             <div style={card}><Ledger /></div>
             <div style={{...card,marginTop:14}}>
               <div style={{fontFamily:"'Bebas Neue',sans-serif",letterSpacing:3,fontSize:"1.1rem",color:"#f5c842",borderBottom:"1px solid #252538",paddingBottom:8,marginBottom:10}}>QUICK LINKS</div>
