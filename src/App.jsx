@@ -236,17 +236,44 @@ function CostMeter() {
 // ============================================================
 const THUMB_WINDOW = 5;
 
+// Load photos from localStorage, falling back to defaults
+const PHOTO_DEFAULTS = [
+  { id:"p1", emoji:"🤵", label:"THE DADCHELOR", caption:"Last day of freedom", color:"#1a0e05" },
+  { id:"p2", emoji:"😅", label:"ROOKIE MOVE", caption:"His last good decision", color:"#05101a" },
+  { id:"p3", emoji:"🎰", label:"CAVE CREW", caption:"March Madness 2026", color:"#10051a" },
+];
+
+function loadSavedPhotos() {
+  try {
+    const saved = localStorage.getItem("cave_photos");
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (parsed.length) return parsed;
+    }
+  } catch {}
+  return PHOTO_DEFAULTS;
+}
+
+function savePhotos(photos) {
+  try {
+    // Only save user-uploaded photos (ones with base64 data), not the emoji defaults
+    const toSave = photos.filter(p => p.base64 || p.emoji);
+    localStorage.setItem("cave_photos", JSON.stringify(toSave));
+  } catch(e) {
+    // localStorage quota exceeded — too many/large photos
+    console.warn("Could not save photos to localStorage:", e);
+  }
+}
+
 function PhotoStrip({ toast }) {
-  const DEFAULTS = [
-    { id:"p1", emoji:"🤵", label:"THE DADCHELOR", caption:"Last day of freedom", color:"#1a0e05" },
-    { id:"p2", emoji:"😅", label:"ROOKIE MOVE", caption:"His last good decision", color:"#05101a" },
-    { id:"p3", emoji:"🎰", label:"CAVE CREW", caption:"March Madness 2026", color:"#10051a" },
-  ];
-  const [photos, setPhotos] = useState(DEFAULTS);
+  const [photos, setPhotos] = useState(loadSavedPhotos);
   const [slideIdx, setSlideIdx] = useState(0);
   const [showQR, setShowQR] = useState(false);
   const ref = useRef();
   const total = photos.length;
+
+  // Persist to localStorage whenever photos change
+  useEffect(() => { savePhotos(photos); }, [photos]);
 
   useEffect(() => {
     if (total <= 1) return;
@@ -254,13 +281,35 @@ function PhotoStrip({ toast }) {
     return () => clearInterval(t);
   }, [total]);
 
-  const handleFiles = (e) => {
+  const handleFiles = async (e) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
-    setPhotos(prev => [...files.map(f => ({ id:"u"+Date.now()+Math.random(), url:URL.createObjectURL(f), label:"NEW DROP", caption:"Fresh from the cave" })), ...prev]);
-    setSlideIdx(0);
-    toast(`${files.length} photo${files.length > 1 ? "s" : ""} added!`);
     e.target.value = "";
+    toast(`Reading ${files.length} photo${files.length > 1 ? "s" : ""}...`);
+    const newPhotos = await Promise.all(files.map(async f => {
+      const base64 = await new Promise(res => {
+        const reader = new FileReader();
+        // Resize to max 400px to keep localStorage usage low
+        reader.onload = ev => {
+          const img = new Image();
+          img.onload = () => {
+            const MAX = 400;
+            const scale = Math.min(MAX / img.width, MAX / img.height, 1);
+            const canvas = document.createElement("canvas");
+            canvas.width = Math.round(img.width * scale);
+            canvas.height = Math.round(img.height * scale);
+            canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+            res(canvas.toDataURL("image/jpeg", 0.7).split(",")[1]);
+          };
+          img.src = ev.target.result;
+        };
+        reader.readAsDataURL(f);
+      });
+      return { id:"u"+Date.now()+Math.random(), base64, label:"NEW DROP", caption:"Fresh from the cave" };
+    }));
+    setPhotos(prev => [...newPhotos, ...prev]);
+    setSlideIdx(0);
+    toast(`${files.length} photo${files.length > 1 ? "s" : ""} saved! ✓`);
   };
 
   const thumbIndices = (() => {
@@ -282,6 +331,7 @@ function PhotoStrip({ toast }) {
         <div style={{display:"flex",gap:6,marginLeft:10}}>
           <button onClick={()=>setShowQR(!showQR)} style={{fontFamily:"'Bebas Neue',sans-serif",padding:"4px 10px",background:"transparent",color:"#2979ff",border:"1px solid #2979ff",borderRadius:4,cursor:"pointer",fontSize:"0.75rem"}}>QR</button>
           <button onClick={()=>ref.current?.click()} style={{fontFamily:"'Bebas Neue',sans-serif",padding:"4px 10px",background:"transparent",color:"#f5c842",border:"1px solid #f5c842",borderRadius:4,cursor:"pointer",fontSize:"0.75rem"}}>+ PHOTOS</button>
+          <button onClick={()=>{if(window.confirm("Clear all uploaded photos?")){ setPhotos(PHOTO_DEFAULTS); localStorage.removeItem("cave_photos"); }}} style={{fontFamily:"'Bebas Neue',sans-serif",padding:"4px 8px",background:"transparent",color:"#6a6a8a",border:"1px solid #252538",borderRadius:4,cursor:"pointer",fontSize:"0.75rem"}}>✕</button>
           <input ref={ref} type="file" accept="image/*" multiple style={{display:"none"}} onChange={handleFiles} />
         </div>
       </div>
@@ -301,9 +351,9 @@ function PhotoStrip({ toast }) {
           if (!p) return null;
           return (
             <div key={p.id} onClick={()=>setSlideIdx(idx)} style={{flexShrink:0,borderRadius:6,overflow:"hidden",border:`2px solid ${idx===slideIdx?"#f5c842":"#252538"}`,width:130,cursor:"pointer",transition:"border-color 0.3s"}}>
-              {p.url
-                ? <img src={p.url} alt={p.label} style={{width:130,height:130,objectFit:"cover"}} loading="lazy" />
-                : <div style={{width:130,height:130,background:p.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"3rem"}}>{p.emoji}</div>
+              {p.base64
+                ? <img src={`data:image/jpeg;base64,${p.base64}`} alt={p.label} style={{width:130,height:130,objectFit:"cover"}} loading="lazy" />
+                : <div style={{width:130,height:130,background:p.color||"#1a1a2e",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"3rem"}}>{p.emoji}</div>
               }
               <div style={{padding:"4px 6px",background:"#0f0f1a"}}>
                 <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"0.72rem",color:"#f5c842",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.label}</div>
