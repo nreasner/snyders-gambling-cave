@@ -22,7 +22,7 @@ const db = getDatabase(firebaseApp);
 // ============================================================
 const ODDS_API_KEY = "7fec6f19b1eb6838a13fa733bee6d610";
 const ODDS_API_BASE = "https://api.the-odds-api.com/v4";
-const ANTHROPIC_KEY = "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"
+const ANTHROPIC_KEY = "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";
 const ANTHROPIC_HDR = {
   "Content-Type": "application/json",
   "x-api-key": ANTHROPIC_KEY,
@@ -106,12 +106,23 @@ async function callOracle(prompt) {
     }),
   });
   const data = await res.json();
+  if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
   // Track real token usage from API response
   const inputTok = data.usage?.input_tokens || 600;
   const outputTok = data.usage?.output_tokens || 400;
   costTracker.addOracle(inputTok, outputTok);
   const raw = data.content?.[0]?.text || '{"picks":[]}';
-  try { return JSON.parse(raw.replace(/```json|```/g,"")); } catch { return { picks: [] }; }
+  try {
+    const cleaned = raw.replace(/```json\s*/gi,"").replace(/```/g,"").trim();
+    // Sometimes Claude wraps in an object with "picks" key at top level
+    const parsed = JSON.parse(cleaned);
+    return Array.isArray(parsed) ? { picks: parsed } : parsed;
+  } catch {
+    // Try extracting just the JSON object from the text
+    const match = raw.match(/\{[\s\S]*\}/);
+    if (match) { try { return JSON.parse(match[0]); } catch {} }
+    return { picks: [] };
+  }
 }
 
 // ============================================================
@@ -204,11 +215,14 @@ function RazzBanner({ banner, onClose }) {
   const { msg, type } = banner;
   const isHype = type === "hype";
   const bg = isHype ? "linear-gradient(135deg,#00c853,#1b5e20)" : "linear-gradient(135deg,#ff1744,#b71c1c)";
-  const glow = isHype ? "rgba(0,200,83,0.5)" : "rgba(255,23,68,0.5)";
+  const glow = isHype ? "rgba(0,200,83,0.6)" : "rgba(255,23,68,0.6)";
+  const emoji = isHype ? "🎉" : "😈";
   useEffect(() => { const t = setTimeout(onClose, 3000); return () => clearTimeout(t); }, [onClose]);
   return (
-    <div onClick={onClose} style={{position:"fixed",top:0,left:0,right:0,zIndex:250,background:bg,padding:"16px 20px",textAlign:"center",cursor:"pointer",boxShadow:`0 4px 30px ${glow}`}}>
-      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"2rem",letterSpacing:6,color:"#fff",textShadow:`0 0 20px rgba(255,255,255,0.6)`}}>{msg}</div>
+    <div onClick={onClose} style={{position:"fixed",inset:0,zIndex:260,background:bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",boxShadow:`inset 0 0 80px ${glow}`}}>
+      <div style={{fontSize:"5rem",marginBottom:16,filter:"drop-shadow(0 0 20px white)"}}>{emoji}</div>
+      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"clamp(2rem,8vw,5rem)",letterSpacing:8,color:"#fff",textShadow:"0 0 40px rgba(255,255,255,0.8)",textAlign:"center",padding:"0 20px",lineHeight:1.1}}>{msg}</div>
+      <div style={{marginTop:20,fontSize:"0.85rem",color:"rgba(255,255,255,0.6)",letterSpacing:2}}>TAP TO DISMISS</div>
     </div>
   );
 }
@@ -725,7 +739,13 @@ function OraclePanel({ isLive, toast, games }) {
       setPicks(result.picks || []);
       setLastFetch(new Date().toLocaleTimeString());
       toast("Oracle has spoken! 🔮");
-    } catch(e) { toast("Oracle failed — check console"); console.error(e); }
+    } catch(e) {
+      const msg = e.message || String(e);
+      if (msg.includes("401") || msg.includes("auth")) toast("Oracle: API key invalid — check ANTHROPIC_KEY in code");
+      else if (msg.includes("fetch")) toast("Oracle: network error — check connection");
+      else toast("Oracle failed: " + msg.slice(0,60));
+      console.error("Oracle error:", e);
+    }
     setLoading(false);
   };
 
@@ -815,9 +835,16 @@ async function readSlipWithAI(base64Image) {
     }),
   });
   const data = await res.json();
+  if (data.error) throw new Error(data.error.message || "API error");
   const raw = data.content?.[0]?.text || "{}";
-  try { return JSON.parse(raw.replace(/```json|```/g, "").trim()); }
-  catch { return { pick: "Unreadable slip", odds: "?", amount: "?", payout: "?", book: "?" }; }
+  try {
+    const cleaned = raw.replace(/```json\s*/gi,"").replace(/```/g,"").trim();
+    return JSON.parse(cleaned);
+  } catch {
+    const match = raw.match(/\{[\s\S]*\}/);
+    if (match) { try { return JSON.parse(match[0]); } catch {} }
+    return { pick: "Unreadable — fill in manually", odds: "?", amount: "?", payout: "?", book: "?" };
+  }
 }
 
 
@@ -1361,6 +1388,8 @@ export default function App() {
   const { scores, scoresUpdate, scoresError, start: startScores, stop: stopScores } = useESPNScores(isLive);
   const indianaTimerRef = useRef(null);
   const addVoteRef = useRef(null);
+  const cmdPhotoRef = useRef(null);
+  const cmdSlipRef = useRef(null);
   const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
 
   useEffect(() => {
@@ -1498,8 +1527,8 @@ export default function App() {
             <div style={card}><PhotoStrip toast={showToast} /></div>
             <div style={card}>
               <div style={{display:"flex",gap:3,background:"#0f0f1a",padding:3,borderRadius:7,border:"1px solid #252538",marginBottom:12}}>
-                {["scores","boosts","slips","halftime"].map(t=>(
-                  <button key={t} onClick={()=>setTab(t)} style={{flex:1,padding:"6px 4px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:1,fontSize:"0.85rem",background:tab===t?"#161624":"transparent",border:"none",color:tab===t?"#f5c842":"#6a6a8a",cursor:"pointer",borderRadius:5}}>{{scores:"SCORES",boosts:"BOOSTS",slips:"SLIPS",halftime:"🎉 HALFTIME"}[t]||t.toUpperCase()}</button>
+                {["scores","boosts","slips","board","halftime"].map(t=>(
+                  <button key={t} onClick={()=>setTab(t)} style={{flex:1,padding:"6px 2px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:0,fontSize:"0.75rem",background:tab===t?"#161624":"transparent",border:"none",color:tab===t?"#f5c842":"#6a6a8a",cursor:"pointer",borderRadius:5}}>{{scores:"ODDS",boosts:"BOOSTS",slips:"SLIPS",board:"🏆 BOARD",halftime:"🎉 PARTY"}[t]||t.toUpperCase()}</button>
                 ))}
               </div>
 
@@ -1618,6 +1647,7 @@ export default function App() {
               )}
 
               {tab==="slips" && <SlipPanel toast={showToast} onWin={()=>setWinMsg("BET CASHED! 💰🎉")} />}
+              {tab==="board" && <Leaderboard />}
               {tab==="halftime" && <HalftimePlayer toast={showToast} />}
             </div>
           </div>
@@ -1626,7 +1656,7 @@ export default function App() {
           <div>
             <div style={card}><VotePanel toast={showToast} onAddVote={addVoteRef} /></div>
             <div style={card}><OraclePanel isLive={isLive} toast={showToast} games={games} /></div>
-            <div style={{...card, display:"none"}} className="leaderboard-mobile"><Leaderboard /></div>
+
           </div>
 
           {/* RIGHT */}
@@ -1662,15 +1692,32 @@ export default function App() {
               <span>MOBILE COMMANDER</span>
               <button onClick={()=>setCmdOpen(false)} style={{background:"none",border:"none",color:"#6a6a8a",cursor:"pointer",fontSize:"1.1rem"}}>×</button>
             </div>
-            <div style={{padding:"10px 12px"}}>
-              <button onClick={playAirhorn} style={{width:"100%",padding:16,fontFamily:"'Bebas Neue',sans-serif",letterSpacing:4,fontSize:"1.6rem",background:"linear-gradient(135deg,#ff6f00,#ff1744)",color:"#fff",border:"none",borderRadius:8,cursor:"pointer",marginBottom:8}}>AIR HORN</button>
+            <div style={{padding:"10px 12px",maxHeight:"80vh",overflowY:"auto"}}>
+              <button onClick={playAirhorn} style={{width:"100%",padding:14,fontFamily:"'Bebas Neue',sans-serif",letterSpacing:4,fontSize:"1.4rem",background:"linear-gradient(135deg,#ff6f00,#ff1744)",color:"#fff",border:"none",borderRadius:8,cursor:"pointer",marginBottom:6}}>📣 AIR HORN</button>
 
-              <div style={{display:"flex",gap:4,marginBottom:8}}>
+              {/* Upload buttons */}
+              <div style={{display:"flex",gap:5,marginBottom:8}}>
+                <button onClick={()=>cmdPhotoRef.current?.click()} style={{flex:1,padding:"8px 4px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:1,fontSize:"0.82rem",background:"linear-gradient(135deg,#1a0e2e,#2a1050)",color:"#f5c842",border:"1px solid rgba(245,200,66,0.5)",borderRadius:6,cursor:"pointer"}}>📸 WALL OF SHAME</button>
+                <button onClick={()=>cmdSlipRef.current?.click()} style={{flex:1,padding:"8px 4px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:1,fontSize:"0.82rem",background:"linear-gradient(135deg,#0a1a0a,#0d2e0d)",color:"#00e676",border:"1px solid rgba(0,230,118,0.5)",borderRadius:6,cursor:"pointer"}}>🎰 BET SLIP</button>
+              </div>
+              <input ref={cmdPhotoRef} type="file" accept="image/*" multiple style={{display:"none"}} onChange={async e=>{
+                const files=Array.from(e.target.files); if(!files.length) return; e.target.value="";
+                showToast(`Uploading ${files.length} photo${files.length>1?"s":""}...`);
+                for(const f of files){ const b=await resizeToBase64(f,500,0.75); await push(dbRef(db,"photos"),{base64:b,label:"CAVE DROP",caption:"From the party 🎉",ts:Date.now()}); }
+                showToast(`${files.length} photo${files.length>1?"s":""} on the wall! 📸`);
+              }} />
+              <input ref={cmdSlipRef} type="file" accept="image/*" style={{display:"none"}} onChange={async e=>{
+                const files=Array.from(e.target.files); if(!files.length) return; e.target.value="";
+                showToast("Reading slip... 🔮");
+                for(const f of files){ await uploadSlipToFirebase(f,"HOST",showToast); }
+              }} />
+
+              <div style={{display:"flex",gap:4,marginBottom:6}}>
                 {["razz","hype"].map(t=>(
                   <button key={t} onClick={()=>setCmdTab(t)} style={{flex:1,padding:6,fontFamily:"'Bebas Neue',sans-serif",fontSize:"0.85rem",background:cmdTab===t?"#161624":"transparent",border:"none",color:cmdTab===t?"#f5c842":"#6a6a8a",cursor:"pointer",borderRadius:5}}>{t.toUpperCase()}</button>
                 ))}
               </div>
-              <div style={{maxHeight:260,overflowY:"auto"}}>
+              <div style={{maxHeight:220,overflowY:"auto"}}>
                 {(cmdTab==="razz"?RAZZ:HYPE).map((msg,i)=>(
                   <button key={i} className="razz-btn" style={{background:`hsl(${i*36+(cmdTab==="hype"?120:0)},55%,20%)`}}
                     onClick={()=>fireRazz(msg, cmdTab)}>
