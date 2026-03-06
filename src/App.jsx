@@ -219,10 +219,9 @@ function RazzBanner({ banner, onClose }) {
   const emoji = isHype ? "🎉" : "😈";
   useEffect(() => { const t = setTimeout(onClose, 3000); return () => clearTimeout(t); }, [onClose]);
   return (
-    <div onClick={onClose} style={{position:"fixed",inset:0,zIndex:260,background:bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",boxShadow:`inset 0 0 80px ${glow}`}}>
+    <div style={{position:"fixed",inset:0,zIndex:260,background:bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",pointerEvents:"none",boxShadow:`inset 0 0 80px ${glow}`}}>
       <div style={{fontSize:"5rem",marginBottom:16,filter:"drop-shadow(0 0 20px white)"}}>{emoji}</div>
       <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"clamp(2rem,8vw,5rem)",letterSpacing:8,color:"#fff",textShadow:"0 0 40px rgba(255,255,255,0.8)",textAlign:"center",padding:"0 20px",lineHeight:1.1}}>{msg}</div>
-      <div style={{marginTop:20,fontSize:"0.85rem",color:"rgba(255,255,255,0.6)",letterSpacing:2}}>TAP TO DISMISS</div>
     </div>
   );
 }
@@ -1300,14 +1299,45 @@ function MobileUpload() {
       {showMediaChoice && (
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:200,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={()=>setShowMediaChoice(null)}>
           <div style={{background:"#161624",border:"1px solid #252538",borderRadius:"16px 16px 0 0",padding:"20px 20px 36px",width:"100%",maxWidth:480}} onClick={e=>e.stopPropagation()}>
-            <div style={{fontFamily:"'Bebas Neue',sans-serif",letterSpacing:3,fontSize:"1.1rem",color:"#f5c842",textAlign:"center",marginBottom:16}}>
-              {showMediaChoice === "photo" ? "ADD TO WALL OF SHAME" : "UPLOAD BET SLIP"}
-            </div>
-            <button onClick={()=>{ showMediaChoice==="photo" ? cameraRef.current?.click() : cameraSlipRef.current?.click(); }} style={{width:"100%",padding:"16px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:2,fontSize:"1.1rem",background:"#0f0f1a",color:"#e8e8f0",border:"1px solid #252538",borderRadius:10,cursor:"pointer",marginBottom:10,display:"flex",alignItems:"center",gap:12,justifyContent:"center"}}>
-              <span style={{fontSize:"1.5rem"}}>📷</span> TAKE PHOTO
-            </button>
-            <button onClick={()=>{ showMediaChoice==="photo" ? galleryRef.current?.click() : gallerySlipRef.current?.click(); }} style={{width:"100%",padding:"16px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:2,fontSize:"1.1rem",background:"#0f0f1a",color:"#e8e8f0",border:"1px solid #252538",borderRadius:10,cursor:"pointer",display:"flex",alignItems:"center",gap:12,justifyContent:"center"}}>
-              <span style={{fontSize:"1.5rem"}}>🖼️</span> CHOOSE FROM GALLERY
+
+            {/* RAZZ MENU */}
+            {showMediaChoice === "razz" && <>
+              <div style={{fontFamily:"'Bebas Neue',sans-serif",letterSpacing:3,fontSize:"1.1rem",color:"#ff1744",textAlign:"center",marginBottom:16}}>😈 CHOOSE YOUR RAZZ</div>
+              {["CHECK YOUR SQUARES DADCHELOR!","YOUR BRACKET IS DEAD","SHOULDVE LISTENED TO THE CAVE","WHO PICKED THAT TEAM???","PORTFOLIO LOOKING ROUGH BRO","DADDY NEEDS A TIMEOUT","BIG YIKES FROM THE CAVE","WRONG PICK!","DRINK EVERY TIME YOURE WRONG","BOW DOWN TO THE CAVE ORACLE"].map((msg,i)=>(
+                <button key={i} onClick={()=>{ push(dbRef(db,"banners"),{msg,type:"razz",ts:Date.now()}); flash("RAZZ SENT! 😈","#ff1744"); setShowMediaChoice(null); }}
+                  style={{width:"100%",padding:"13px 16px",marginBottom:8,fontFamily:"'Bebas Neue',sans-serif",letterSpacing:1,fontSize:"1rem",background:"rgba(255,23,68,0.1)",color:"#ff1744",border:"1px solid rgba(255,23,68,0.3)",borderRadius:8,cursor:"pointer",textAlign:"left"}}>
+                  {msg}
+                </button>
+              ))}
+            </>}
+
+            {/* HYPE MENU */}
+            {showMediaChoice === "hype" && <>
+              <div style={{fontFamily:"'Bebas Neue',sans-serif",letterSpacing:3,fontSize:"1.1rem",color:"#00e676",textAlign:"center",marginBottom:16}}>🎉 CHOOSE YOUR HYPE</div>
+              {["LETS GOOOOO!","WERE PRINTING MONEY!","CAVE PREDICTS AGAIN!","CASH THAT TICKET!","WE RIDE TOGETHER!","BRACKET KING!","MONEY PRINTER GO BRRR","CAVE NEVER MISSES","RETIRE OFF THIS ONE","GOAT BEHAVIOR"].map((msg,i)=>(
+                <button key={i} onClick={()=>{ push(dbRef(db,"banners"),{msg,type:"hype",ts:Date.now()}); flash("HYPE SENT! 🎉","#00e676"); setShowMediaChoice(null); }}
+                  style={{width:"100%",padding:"13px 16px",marginBottom:8,fontFamily:"'Bebas Neue',sans-serif",letterSpacing:1,fontSize:"1rem",background:"rgba(0,230,118,0.1)",color:"#00e676",border:"1px solid rgba(0,230,118,0.3)",borderRadius:8,cursor:"pointer",textAlign:"left"}}>
+                  {msg}
+                </button>
+              ))}
+            </>}
+
+            {/* PHOTO / SLIP MENU */}
+            {(showMediaChoice === "photo" || showMediaChoice === "slip") && <>
+              <div style={{fontFamily:"'Bebas Neue',sans-serif",letterSpacing:3,fontSize:"1.1rem",color:"#f5c842",textAlign:"center",marginBottom:16}}>
+                {showMediaChoice === "photo" ? "ADD TO WALL OF SHAME" : "UPLOAD BET SLIP"}
+              </div>
+              <button onClick={()=>{ showMediaChoice==="photo" ? cameraRef.current?.click() : cameraSlipRef.current?.click(); }} style={{width:"100%",padding:"16px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:2,fontSize:"1.1rem",background:"#0f0f1a",color:"#e8e8f0",border:"1px solid #252538",borderRadius:10,cursor:"pointer",marginBottom:10,display:"flex",alignItems:"center",gap:12,justifyContent:"center"}}>
+                <span style={{fontSize:"1.5rem"}}>📷</span> TAKE PHOTO
+              </button>
+              <button onClick={()=>{ showMediaChoice==="photo" ? galleryRef.current?.click() : gallerySlipRef.current?.click(); }} style={{width:"100%",padding:"16px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:2,fontSize:"1.1rem",background:"#0f0f1a",color:"#e8e8f0",border:"1px solid #252538",borderRadius:10,cursor:"pointer",display:"flex",alignItems:"center",gap:12,justifyContent:"center"}}>
+                <span style={{fontSize:"1.5rem"}}>🖼️</span> CHOOSE FROM GALLERY
+              </button>
+            </>}
+
+            {/* BACK BUTTON */}
+            <button onClick={()=>setShowMediaChoice(null)} style={{width:"100%",padding:"12px",marginTop:10,fontFamily:"'Bebas Neue',sans-serif",letterSpacing:2,fontSize:"0.9rem",background:"transparent",color:"#6a6a8a",border:"1px solid #252538",borderRadius:10,cursor:"pointer"}}>
+              ← BACK
             </button>
           </div>
         </div>
@@ -1328,23 +1358,15 @@ function MobileUpload() {
         </button>
 
         {/* RAZZ */}
-        <button onClick={()=>{
-          const msgs = ["CHECK YOUR SQUARES DADCHELOR!","YOUR BRACKET IS DEAD","SHOULDVE LISTENED TO THE CAVE","WHO PICKED THAT TEAM???","PORTFOLIO LOOKING ROUGH BRO","DADDY NEEDS A TIMEOUT","BIG YIKES FROM THE CAVE","WRONG PICK!","DRINK EVERY TIME YOURE WRONG","BOW DOWN TO THE CAVE ORACLE"];
-          const msg = msgs[Math.floor(Math.random()*msgs.length)];
-          push(dbRef(db, "banners"), { msg, type:"razz", ts: Date.now() });
-          flash("RAZZ SENT! 😈", "#ff1744");
-        }} style={{width:"100%",padding:"18px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:3,fontSize:"1.4rem",background:"linear-gradient(135deg,#1a0505,#3a0a0a)",color:"#ff1744",border:"2px solid #ff1744",borderRadius:12,cursor:"pointer",boxShadow:"0 4px 20px rgba(255,23,68,0.2)"}}>
+        <button onClick={()=>setShowMediaChoice("razz")} style={{width:"100%",padding:"18px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:3,fontSize:"1.4rem",background:"linear-gradient(135deg,#1a0505,#3a0a0a)",color:"#ff1744",border:"2px solid #ff1744",borderRadius:12,cursor:"pointer",boxShadow:"0 4px 20px rgba(255,23,68,0.2)"}}>
           😈 RAZZ THE DADCHELOR
+          <div style={{fontSize:"0.65rem",color:"rgba(255,100,100,0.7)",letterSpacing:1,marginTop:3,fontFamily:"Oswald,sans-serif",fontWeight:400}}>Pick what to say</div>
         </button>
 
         {/* CELEBRATE */}
-        <button onClick={()=>{
-          const msgs = ["LETS GOOOOO!","WERE PRINTING MONEY!","CAVE PREDICTS AGAIN!","CASH THAT TICKET!","WE RIDE TOGETHER!","BRACKET KING!"];
-          const msg = msgs[Math.floor(Math.random()*msgs.length)];
-          push(dbRef(db, "banners"), { msg, type:"hype", ts: Date.now() });
-          flash("HYPE SENT! 🎉", "#00e676");
-        }} style={{width:"100%",padding:"18px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:3,fontSize:"1.4rem",background:"linear-gradient(135deg,#051a05,#0a3a0a)",color:"#00e676",border:"2px solid #00e676",borderRadius:12,cursor:"pointer",boxShadow:"0 4px 20px rgba(0,230,118,0.2)"}}>
+        <button onClick={()=>setShowMediaChoice("hype")} style={{width:"100%",padding:"18px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:3,fontSize:"1.4rem",background:"linear-gradient(135deg,#051a05,#0a3a0a)",color:"#00e676",border:"2px solid #00e676",borderRadius:12,cursor:"pointer",boxShadow:"0 4px 20px rgba(0,230,118,0.2)"}}>
           🎉 CELEBRATE
+          <div style={{fontSize:"0.65rem",color:"rgba(0,200,100,0.7)",letterSpacing:1,marginTop:3,fontFamily:"Oswald,sans-serif",fontWeight:400}}>Pick what to say</div>
         </button>
 
         {/* BET SLIP */}
