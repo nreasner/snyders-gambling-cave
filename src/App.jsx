@@ -22,7 +22,7 @@ const db = getDatabase(firebaseApp);
 // ============================================================
 const ODDS_API_KEY = "7fec6f19b1eb6838a13fa733bee6d610";
 const ODDS_API_BASE = "https://api.the-odds-api.com/v4";
-const ANTHROPIC_KEY = "PASTE_YOUR_ANTHROPIC_KEY_HERE"; // get from console.anthropic.com
+const ANTHROPIC_KEY = "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"
 const ANTHROPIC_HDR = {
   "Content-Type": "application/json",
   "x-api-key": ANTHROPIC_KEY,
