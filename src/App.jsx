@@ -35,11 +35,11 @@ const INDIANA_IMG = "https://upload.wikimedia.org/wikipedia/commons/thumb/3/35/I
 const RANDY_GIF = "https://media1.tenor.com/m/NN89l8Ln8iIAAAAd/randy-marsh-south-park.gif";
 
 const SPORTSBOOK_URLS = {
-  "DraftKings": "https://www.draftkings.com",
-  "FanDuel": "https://www.fanduel.com",
-  "BetMGM": "https://www.betmgm.com",
-  "Caesars": "https://www.caesars.com/sportsbook-and-casino",
-  "ESPN BET": "https://espnbet.com",
+  "DraftKings": "https://sportsbook.draftkings.com/leagues/basketball/ncaab",
+  "FanDuel": "https://sportsbook.fanduel.com/navigation/ncaab",
+  "BetMGM": "https://sports.betmgm.com/en/sports/basketball-7/college-basketball-9",
+  "Caesars": "https://sportsbook.caesars.com/us/nj/sport/basketball/ncaab",
+  "ESPN BET": "https://espnbet.com/sport/basketball/organization/united-states/competition/mens-college-basketball",
 };
 
 const RAZZ = [
@@ -217,13 +217,74 @@ function RazzBanner({ banner, onClose }) {
   const bg = isHype ? "linear-gradient(135deg,#00c853,#1b5e20)" : "linear-gradient(135deg,#ff1744,#b71c1c)";
   const glow = isHype ? "rgba(0,200,83,0.6)" : "rgba(255,23,68,0.6)";
   const emoji = isHype ? "🎉" : "😈";
-  useEffect(() => { const t = setTimeout(onClose, 3000); return () => clearTimeout(t); }, [onClose]);
+  useEffect(() => {
+    const t = setTimeout(onClose, 3000);
+    // Play sound: airhorn for hype, short buzzer beep for razz
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      if (isHype) {
+        // Play the airhorn
+        playAirhornSound();
+      } else {
+        // Buzzer: two descending tones
+        [0,0.15].forEach((delay,i) => {
+          const o = ctx.createOscillator(); const g = ctx.createGain();
+          o.connect(g); g.connect(ctx.destination);
+          o.frequency.value = 180 - i*40; o.type = "sawtooth";
+          g.gain.setValueAtTime(0.4, ctx.currentTime+delay);
+          g.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime+delay+0.3);
+          o.start(ctx.currentTime+delay); o.stop(ctx.currentTime+delay+0.3);
+        });
+      }
+    } catch(e) {}
+    return () => clearTimeout(t);
+  }, [onClose]);
   return (
     <div style={{position:"fixed",inset:0,zIndex:260,background:bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",pointerEvents:"none",boxShadow:`inset 0 0 80px ${glow}`}}>
       <div style={{fontSize:"5rem",marginBottom:16,filter:"drop-shadow(0 0 20px white)"}}>{emoji}</div>
       <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"clamp(2rem,8vw,5rem)",letterSpacing:8,color:"#fff",textShadow:"0 0 40px rgba(255,255,255,0.8)",textAlign:"center",padding:"0 20px",lineHeight:1.1}}>{msg}</div>
     </div>
   );
+}
+
+// ============================================================
+// CONFETTI
+// ============================================================
+function Confetti({ onDone }) {
+  const canvasRef = useRef();
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    const pieces = Array.from({length:180},()=>({
+      x: Math.random()*canvas.width,
+      y: Math.random()*canvas.height - canvas.height,
+      w: Math.random()*12+4, h: Math.random()*8+4,
+      r: Math.random()*Math.PI*2,
+      vx: (Math.random()-0.5)*4,
+      vy: Math.random()*4+2,
+      vr: (Math.random()-0.5)*0.2,
+      color: ["#f5c842","#ff1744","#00e676","#d500f9","#2979ff","#ff6f00"][Math.floor(Math.random()*6)],
+    }));
+    let frame;
+    let start = Date.now();
+    const draw = () => {
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      pieces.forEach(p=>{
+        p.x+=p.vx; p.y+=p.vy; p.r+=p.vr;
+        if(p.y>canvas.height){p.y=-20;p.x=Math.random()*canvas.width;}
+        ctx.save(); ctx.translate(p.x+p.w/2,p.y+p.h/2); ctx.rotate(p.r);
+        ctx.fillStyle=p.color; ctx.fillRect(-p.w/2,-p.h/2,p.w,p.h);
+        ctx.restore();
+      });
+      if(Date.now()-start<5000) frame=requestAnimationFrame(draw); else onDone&&onDone();
+    };
+    draw();
+    return ()=>cancelAnimationFrame(frame);
+  },[]);
+  return <canvas ref={canvasRef} style={{position:"fixed",inset:0,zIndex:255,pointerEvents:"none"}} />;
 }
 
 // ============================================================
@@ -338,13 +399,14 @@ function PhotoStrip({ toast }) {
     const files = Array.from(e.target.files);
     if (!files.length) return;
     e.target.value = "";
+    const caption = window.prompt("Add a caption for this photo (optional):") || "";
     setUploading(true);
     toast(`Uploading ${files.length} photo${files.length > 1 ? "s" : ""}...`);
     for (const file of files) {
       try {
         const base64 = await resizeToBase64(file, 500, 0.75);
         await push(dbRef(db, "photos"), {
-          base64, label: "NEW DROP", caption: "Fresh from the cave", ts: Date.now()
+          base64, label: "WALL DROP", caption: caption || "Fresh from the cave 🎉", ts: Date.now()
         });
       } catch(err) { toast("Upload failed — " + err.message); }
     }
@@ -728,13 +790,13 @@ function OraclePanel({ isLive, toast, games }) {
   const [lastFetch, setLastFetch] = useState(null);
 
   const fetchPicks = async () => {
-    if (!isLive || loading) return;
+    if (loading) return;
     setLoading(true);
     const gameList = games.length
-      ? games.slice(0,4).map(g=>`${g.team1} vs ${g.team2} (spread: ${g.spread}, O/U: ${g.ou})`).join(", ")
-      : "March Madness tournament games tonight";
+      ? games.slice(0,6).map(g=>`${g.team1} vs ${g.team2} (spread: ${g.spread}, O/U: ${g.ou})`).join(", ")
+      : "March Madness 2026 tournament games — analyze top matchups and find value bets";
     try {
-      const result = await callOracle(`Analyze: ${gameList}. Find the 4 best bets including parlay opportunities for our dadchelor party cave crew.`);
+      const result = await callOracle(`Analyze: ${gameList}. Find the 4 best bets including parlay opportunities for our dadchelor party cave crew. Be specific, funny, and confident.`);
       setPicks(result.picks || []);
       setLastFetch(new Date().toLocaleTimeString());
       toast("Oracle has spoken! 🔮");
@@ -752,20 +814,23 @@ function OraclePanel({ isLive, toast, games }) {
     <div>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
         <div style={{fontFamily:"'Bebas Neue',sans-serif",letterSpacing:3,fontSize:"1.1rem",color:"#f5c842"}}>CAVE ORACLE</div>
-        <button onClick={fetchPicks} disabled={!isLive||loading} style={{fontFamily:"'Bebas Neue',sans-serif",letterSpacing:2,padding:"4px 12px",background:isLive&&!loading?"#f5c842":"transparent",color:isLive&&!loading?"#000":"#6a6a8a",border:`1px solid ${isLive&&!loading?"#f5c842":"#252538"}`,borderRadius:4,cursor:"pointer",fontSize:"0.78rem"}}>
+        <button onClick={fetchPicks} disabled={loading} style={{fontFamily:"'Bebas Neue',sans-serif",letterSpacing:2,padding:"4px 12px",background:!loading?"#f5c842":"transparent",color:!loading?"#000":"#6a6a8a",border:`1px solid ${!loading?"#f5c842":"#252538"}`,borderRadius:4,cursor:"pointer",fontSize:"0.78rem"}}>
           {loading?"READING...":"GET PICKS"}
         </button>
       </div>
-      {!isLive && <div style={{textAlign:"center",padding:30,color:"#6a6a8a",fontSize:"0.85rem"}}>Turn on GO LIVE to use the Oracle</div>}
-      {isLive && loading && <div style={{padding:14,color:"#f5c842",fontFamily:"'Source Code Pro',monospace",fontSize:"0.85rem"}}>Cave Oracle analyzing the lines...</div>}
-      {isLive && !loading && !picks.length && <div style={{textAlign:"center",padding:20,color:"#6a6a8a",fontSize:"0.85rem"}}>Hit GET PICKS to consult the Oracle 🔮</div>}
+      {!isLive && !picks.length && <div style={{padding:"8px 10px",background:"rgba(245,200,66,0.06)",border:"1px solid rgba(245,200,66,0.2)",borderRadius:5,marginBottom:8,fontSize:"0.72rem",color:"#f5c842"}}>⚡ GO LIVE for real-time odds · Oracle works anytime</div>}
+      {loading && <div style={{padding:14,color:"#f5c842",fontFamily:"'Source Code Pro',monospace",fontSize:"0.85rem",animation:"pulse 1s infinite"}}>Cave Oracle analyzing the lines...</div>}
+      {!loading && !picks.length && <div style={{textAlign:"center",padding:20,color:"#6a6a8a",fontSize:"0.85rem"}}>Hit GET PICKS to consult the Oracle 🔮</div>}
       {picks.map((p,i) => (
-        <div key={i} onClick={()=>setExpanded(expanded===i?null:i)} style={{background:"#0f0f1a",border:`1px solid ${p.value==="HIGH"?"rgba(245,200,66,0.5)":"#252538"}`,borderRadius:6,padding:10,marginBottom:8,cursor:"pointer"}}>
+        <div key={i} style={{background:"#0f0f1a",border:`1px solid ${p.value==="HIGH"?"rgba(245,200,66,0.5)":"#252538"}`,borderRadius:6,padding:10,marginBottom:8}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"0.95rem",color:p.value==="HIGH"?"#f5c842":"#e8e8f0",flex:1,marginRight:8}}>{p.pick}</div>
-            <div style={{textAlign:"right",flexShrink:0}}>
-              <div style={{fontSize:"0.68rem",color:p.value==="HIGH"?"#f5c842":"#6a6a8a"}}>{p.value}</div>
-              <div style={{color:"#00e676",fontFamily:"'Source Code Pro',monospace"}}>{p.confidence}%</div>
+            <div onClick={()=>setExpanded(expanded===i?null:i)} style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"0.95rem",color:p.value==="HIGH"?"#f5c842":"#e8e8f0",flex:1,marginRight:8,cursor:"pointer"}}>{p.pick}</div>
+            <div style={{display:"flex",gap:5,alignItems:"center",flexShrink:0}}>
+              <div style={{textAlign:"right"}}>
+                <div style={{fontSize:"0.68rem",color:p.value==="HIGH"?"#f5c842":"#6a6a8a"}}>{p.value}</div>
+                <div style={{color:"#00e676",fontFamily:"'Source Code Pro',monospace"}}>{p.confidence}%</div>
+              </div>
+              <button onClick={()=>onVote&&onVote(p.pick,"")} title="Put to vote" style={{background:"rgba(245,200,66,0.15)",border:"1px solid rgba(245,200,66,0.4)",color:"#f5c842",borderRadius:4,cursor:"pointer",padding:"3px 6px",fontSize:"0.65rem",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:1}}>VOTE</button>
             </div>
           </div>
           <div style={{height:4,background:"#252538",borderRadius:2,marginTop:6}}><div style={{height:"100%",width:`${p.confidence}%`,background:"linear-gradient(90deg,#2979ff,#00e676)",borderRadius:2}} /></div>
@@ -872,6 +937,8 @@ function SlipPanel({ toast, onWin }) {
   const [showNamePrompt, setShowNamePrompt] = useState(false);
   const [pendingFiles, setPendingFiles] = useState([]);
   const ref = useRef();
+  const [editingSlip, setEditingSlip] = useState(null);
+  const [editDraft, setEditDraft] = useState({});
 
   // Subscribe to Firebase slips
   useEffect(() => {
@@ -964,7 +1031,28 @@ function SlipPanel({ toast, onWin }) {
               </div>
             )}
             {(s.status==="won"||s.status==="lost"||s.status==="push") && (
-              <button onClick={()=>setStatus(s.fbKey,"open")} style={{width:"100%",padding:"4px",fontFamily:"'Bebas Neue',sans-serif",background:"transparent",color:"#6a6a8a",border:"1px solid #252538",borderRadius:4,cursor:"pointer",fontSize:"0.72rem",letterSpacing:1}}>UNDO</button>
+              <button onClick={()=>setStatus(s.fbKey,"open")} style={{width:"100%",padding:"4px",fontFamily:"'Bebas Neue',sans-serif",background:"transparent",color:"#6a6a8a",border:"1px solid #252538",borderRadius:4,cursor:"pointer",fontSize:"0.72rem",letterSpacing:1,marginBottom:4}}>UNDO</button>
+            )}
+            {editingSlip===s.fbKey ? (
+              <div style={{background:"#0a0a18",border:"1px solid #f5c842",borderRadius:6,padding:8,marginTop:4}}>
+                <div style={{fontSize:"0.65rem",color:"#f5c842",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:1,marginBottom:5}}>EDIT SLIP</div>
+                {[["pick","Pick/Bet"],["odds","Odds"],["amount","Amount $"],["payout","Payout $"]].map(([k,lbl])=>(
+                  <div key={k} style={{display:"flex",alignItems:"center",gap:5,marginBottom:4}}>
+                    <span style={{fontSize:"0.62rem",color:"#6a6a8a",width:60,flexShrink:0}}>{lbl}</span>
+                    <input value={editDraft[k]||""} onChange={e=>setEditDraft(d=>({...d,[k]:e.target.value}))}
+                      style={{flex:1,background:"#161624",border:"1px solid #252538",borderRadius:3,padding:"3px 6px",color:"#e8e8f0",fontSize:"0.78rem",fontFamily:"Oswald,sans-serif"}} />
+                  </div>
+                ))}
+                <div style={{display:"flex",gap:4,marginTop:4}}>
+                  <button onClick={async()=>{await update(dbRef(db,`slips/${s.fbKey}`),editDraft);setEditingSlip(null);toast("Slip updated ✓");}} style={{flex:2,padding:"5px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:1,background:"#00e676",color:"#000",border:"none",borderRadius:4,cursor:"pointer",fontSize:"0.78rem"}}>SAVE</button>
+                  <button onClick={()=>setEditingSlip(null)} style={{flex:1,padding:"5px",fontFamily:"'Bebas Neue',sans-serif",background:"transparent",color:"#6a6a8a",border:"1px solid #252538",borderRadius:4,cursor:"pointer",fontSize:"0.78rem"}}>CANCEL</button>
+                </div>
+              </div>
+            ) : (
+              <div style={{display:"flex",gap:4,marginTop:4}}>
+                <button onClick={()=>{setEditingSlip(s.fbKey);setEditDraft({pick:s.pick,odds:s.odds,amount:s.amount,payout:s.payout});}} style={{flex:2,padding:"4px",fontFamily:"'Bebas Neue',sans-serif",background:"transparent",color:"#2979ff",border:"1px solid rgba(41,121,255,0.4)",borderRadius:4,cursor:"pointer",fontSize:"0.7rem",letterSpacing:1}}>✎ EDIT</button>
+                <button onClick={()=>{if(window.confirm("Delete this slip?"))remove(dbRef(db,`slips/${s.fbKey}`));}} style={{flex:1,padding:"4px",fontFamily:"'Bebas Neue',sans-serif",background:"transparent",color:"#ff1744",border:"1px solid rgba(255,23,68,0.3)",borderRadius:4,cursor:"pointer",fontSize:"0.7rem"}}>✕ DEL</button>
+              </div>
             )}
           </div>
         ))}
@@ -1211,20 +1299,32 @@ function MobileUpload() {
   };
 
   // ── Photo upload ──
+  const [pendingPhotoFiles, setPendingPhotoFiles] = useState([]);
+  const [photoCaption, setPhotoCaption] = useState("");
+  const [showCaptionInput, setShowCaptionInput] = useState(false);
+
   const handlePhotos = async (e) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
     e.target.value = "";
     setShowMediaChoice(null);
+    setPendingPhotoFiles(files);
+    setPhotoCaption("");
+    setShowCaptionInput(true);
+  };
+
+  const submitPhotos = async (caption) => {
+    setShowCaptionInput(false);
     setUploading(true);
-    for (const file of files) {
+    for (const file of pendingPhotoFiles) {
       const base64 = await resizeToBase64(file, 500, 0.75);
       await push(dbRef(db, "photos"), {
-        base64, label: name || "CAVE CREW", caption: "From the party 🎉", ts: Date.now()
+        base64, label: name || "CAVE CREW", caption: caption || "From the party 🎉", ts: Date.now()
       });
     }
     setUploading(false);
-    flash(`${files.length} photo${files.length > 1 ? "s" : ""} on the wall! 📸`);
+    setPendingPhotoFiles([]);
+    flash(`${pendingPhotoFiles.length || 1} photo${(pendingPhotoFiles.length||1) > 1 ? "s" : ""} on the wall! 📸`);
   };
 
   // ── Slip upload ──
@@ -1280,6 +1380,20 @@ function MobileUpload() {
           </div>
         )}
       </div>
+
+      {/* CAPTION INPUT */}
+      {showCaptionInput && (
+        <div style={{width:"100%",background:"#161624",border:"1px solid #f5c842",borderRadius:10,padding:"14px 16px",marginBottom:14}}>
+          <div style={{fontFamily:"'Bebas Neue',sans-serif",letterSpacing:2,color:"#f5c842",marginBottom:8,fontSize:"1rem"}}>ADD A CAPTION 📸</div>
+          <input value={photoCaption} onChange={e=>setPhotoCaption(e.target.value)}
+            placeholder="What's happening here? (optional)"
+            style={{width:"100%",background:"#0f0f1a",border:"1px solid #252538",borderRadius:6,padding:"10px 12px",color:"#e8e8f0",fontFamily:"Oswald,sans-serif",fontSize:"0.95rem",marginBottom:10}} />
+          <div style={{display:"flex",gap:6}}>
+            <button onClick={()=>submitPhotos(photoCaption)} style={{flex:2,padding:"10px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:2,background:"#f5c842",color:"#000",border:"none",borderRadius:6,cursor:"pointer",fontSize:"0.95rem"}}>POST IT 🔥</button>
+            <button onClick={()=>submitPhotos("")} style={{flex:1,padding:"10px",fontFamily:"'Bebas Neue',sans-serif",background:"transparent",color:"#6a6a8a",border:"1px solid #252538",borderRadius:6,cursor:"pointer",fontSize:"0.85rem"}}>SKIP</button>
+          </div>
+        </div>
+      )}
 
       {/* FLASH MESSAGE */}
       {flashMsg && (
@@ -1382,7 +1496,7 @@ function MobileUpload() {
         </button>
 
         {/* VIEW FULL CAVE */}
-        <a href="https://www.snydersgamblingcave.com" style={{display:"block",width:"100%",padding:"13px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:2,fontSize:"0.95rem",background:"transparent",color:"#6a6a8a",border:"1px solid #252538",borderRadius:10,cursor:"pointer",textAlign:"center",textDecoration:"none",marginTop:2}}>
+        <a href="https://www.snydersgamblingcave.com?desktop=1" style={{display:"block",width:"100%",padding:"13px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:2,fontSize:"0.95rem",background:"transparent",color:"#6a6a8a",border:"1px solid #252538",borderRadius:10,cursor:"pointer",textAlign:"center",textDecoration:"none",marginTop:2}}>
           VIEW FULL CAVE →
         </a>
       </div>
@@ -1404,6 +1518,7 @@ export default function App() {
   const [razzBanner, setRazzBanner] = useState(null);
   const [showRandy, setShowRandy] = useState(false);
   const [showIndiana, setShowIndiana] = useState(false);
+  const [showConfetti, setShowConfetti] = useState(false);
   const [selectedGame, setSelectedGame] = useState(null);
   const [time, setTime] = useState(new Date().toLocaleTimeString());
   const { games, lastUpdate, error, refresh } = useOddsAPI(isLive);
@@ -1412,7 +1527,8 @@ export default function App() {
   const addVoteRef = useRef(null);
   const cmdPhotoRef = useRef(null);
   const cmdSlipRef = useRef(null);
-  const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
+  const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+  const isMobile = typeof window !== "undefined" && window.innerWidth < 640 && params?.get("desktop") !== "1";
 
   useEffect(() => {
     const t = setInterval(() => setTime(new Date().toLocaleTimeString()), 1000);
@@ -1438,6 +1554,9 @@ export default function App() {
     return () => unsub();
   }, []);
 
+  // Track which games have gone final to avoid re-notifying
+  const finalizedGames = useRef(new Set());
+
   // Start/stop ESPN scores with GO LIVE — Purdue loss fires Randy automatically
   useEffect(() => {
     if (isLive) {
@@ -1447,6 +1566,17 @@ export default function App() {
     }
     return () => stopScores();
   }, [isLive, startScores, stopScores]);
+
+  // Notify when a game goes final
+  useEffect(() => {
+    if (!scores.length) return;
+    scores.forEach(s => {
+      if (s.status === "final" && !finalizedGames.current.has(s.id)) {
+        finalizedGames.current.add(s.id);
+        showToast(`FINAL: ${s.team1} ${s.score1} — ${s.team2} ${s.score2} 🏁`);
+      }
+    });
+  }, [scores]);
 
   // Indiana subliminal flash
   useEffect(() => {
@@ -1677,7 +1807,7 @@ export default function App() {
           {/* CENTER */}
           <div>
             <div style={card}><VotePanel toast={showToast} onAddVote={addVoteRef} /></div>
-            <div style={card}><OraclePanel isLive={isLive} toast={showToast} games={games} /></div>
+            <div style={card}><OraclePanel isLive={isLive} toast={showToast} games={games} onVote={(pick,odds)=>{if(addVoteRef.current){addVoteRef.current(pick,odds);showToast("Oracle pick sent to vote! 🗳️");}}} /></div>
 
           </div>
 
@@ -1703,6 +1833,45 @@ export default function App() {
                   <div key={i}><span style={{color:"#f5c842"}}>{i+1}.</span> {r}</div>
                 ))}
               </div>
+            </div>
+
+            {/* PARTY MODE */}
+            <div style={{...card,marginTop:14}}>
+              <div style={{fontFamily:"'Bebas Neue',sans-serif",letterSpacing:3,fontSize:"1.1rem",color:"#f5c842",borderBottom:"1px solid #252538",paddingBottom:8,marginBottom:10}}>PARTY CONTROLS</div>
+              <button onClick={()=>{
+                playAirhornSound();
+                push(dbRef(db,"banners"),{msg:"LETS GOOOOO! CAVE WINS AGAIN!",type:"hype",ts:Date.now()});
+                setShowConfetti(true);
+                setTimeout(()=>setShowConfetti(false),5000);
+                showToast("PARTY MODE ACTIVATED 🎉");
+              }} style={{width:"100%",padding:"14px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:3,fontSize:"1.2rem",background:"linear-gradient(135deg,#ff6f00,#d500f9)",color:"#fff",border:"none",borderRadius:8,cursor:"pointer",marginBottom:8,boxShadow:"0 4px 20px rgba(213,0,249,0.3)"}}>
+                🎉 PARTY MODE
+              </button>
+              <button onClick={()=>{
+                const msg = RAZZ[Math.floor(Math.random()*RAZZ.length)];
+                push(dbRef(db,"banners"),{msg,type:"razz",ts:Date.now()});
+                showToast("Random razz sent! 😈");
+              }} style={{width:"100%",padding:"10px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:2,fontSize:"0.95rem",background:"rgba(255,23,68,0.1)",color:"#ff1744",border:"1px solid rgba(255,23,68,0.4)",borderRadius:6,cursor:"pointer",marginBottom:6}}>
+                😈 RANDOM RAZZ
+              </button>
+              <button onClick={()=>{
+                const msg = HYPE[Math.floor(Math.random()*HYPE.length)];
+                push(dbRef(db,"banners"),{msg,type:"hype",ts:Date.now()});
+                showToast("Hype sent! 🎉");
+              }} style={{width:"100%",padding:"10px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:2,fontSize:"0.95rem",background:"rgba(0,230,118,0.1)",color:"#00e676",border:"1px solid rgba(0,230,118,0.4)",borderRadius:6,cursor:"pointer",marginBottom:6}}>
+                🎉 RANDOM HYPE
+              </button>
+              <button onClick={()=>{
+                if(!window.confirm("Reset ALL cave data? This will delete all slips, photos, and ledger.")) return;
+                if(!window.confirm("⚠️ FINAL WARNING: This PERMANENTLY deletes everything. Are you absolutely sure?")) return;
+                Promise.all([
+                  remove(dbRef(db,"slips")),
+                  remove(dbRef(db,"photos")),
+                  remove(dbRef(db,"banners")),
+                ]).then(()=>showToast("Cave reset. Starting fresh 🔄"));
+              }} style={{width:"100%",padding:"8px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:1,fontSize:"0.78rem",background:"transparent",color:"#6a6a8a",border:"1px solid #252538",borderRadius:6,cursor:"pointer",marginTop:4}}>
+                🗑️ RESET CAVE DATA
+              </button>
             </div>
           </div>
         </div>
@@ -1758,6 +1927,7 @@ export default function App() {
         {winMsg && <WinOverlay msg={winMsg} onClose={()=>setWinMsg(null)} />}
         {showRandy && <RandyOverlay onClose={()=>setShowRandy(false)} />}
         {showIndiana && <IndianaFlash onDone={()=>setShowIndiana(false)} />}
+        {showConfetti && <Confetti onDone={()=>setShowConfetti(false)} />}
       </div>
     </>
   );
