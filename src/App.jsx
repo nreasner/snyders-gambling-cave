@@ -1277,232 +1277,402 @@ function playAirhornSound() {
 // ============================================================
 // MOBILE UPLOAD SCREEN — shown on phones visiting the site
 // ============================================================
-function MobileUpload() {
+function MobileApp() {
+  const [screen, setScreen] = useState(() => {
+    try { return localStorage.getItem("cave_screen") || "landing"; } catch { return "landing"; }
+  });
+  const goTo = (s) => { setScreen(s); try { localStorage.setItem("cave_screen", s); } catch {} };
+
+  if (screen === "command") return <MobileCommand goBack={()=>goTo("landing")} />;
+  if (screen === "cave")    return <MobileCave    goBack={()=>goTo("landing")} />;
+  return <MobileLanding onCommand={()=>goTo("command")} onCave={()=>goTo("cave")} />;
+}
+
+// ── Landing chooser ──────────────────────────────────────────
+function MobileLanding({ onCommand, onCave }) {
+  return (
+    <div style={{background:"#07070f",minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"30px 20px",fontFamily:"Oswald,sans-serif",color:"#e8e8f0"}}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Oswald:wght@400;600&family=Source+Code+Pro:wght@400;600&display=swap');*{box-sizing:border-box;margin:0;padding:0;}input,button{-webkit-appearance:none;}`}</style>
+
+      {/* Logo */}
+      <div style={{textAlign:"center",marginBottom:40}}>
+        <div style={{fontSize:"3.5rem",marginBottom:8}}>🎰</div>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"2.4rem",letterSpacing:5,background:"linear-gradient(135deg,#f5c842,#ff9800)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",lineHeight:1}}>SNYDERS</div>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"2.4rem",letterSpacing:5,background:"linear-gradient(135deg,#f5c842,#ff9800)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",lineHeight:1}}>GAMBLING CAVE</div>
+        <div style={{fontSize:"0.7rem",color:"#6a6a8a",letterSpacing:3,marginTop:8}}>DADCHELOR 2026 · MARCH MADNESS</div>
+      </div>
+
+      {/* Two big choice buttons */}
+      <div style={{width:"100%",maxWidth:360,display:"flex",flexDirection:"column",gap:14}}>
+        <button onClick={onCommand} style={{width:"100%",padding:"28px 20px",background:"linear-gradient(135deg,#1a0f00,#2e1a00)",border:"2px solid #f5c842",borderRadius:16,cursor:"pointer",textAlign:"left",position:"relative",overflow:"hidden",boxShadow:"0 8px 30px rgba(245,200,66,0.15)"}}>
+          <div style={{position:"absolute",right:16,top:"50%",transform:"translateY(-50%)",fontSize:"3rem",opacity:0.15}}>📱</div>
+          <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"1.6rem",letterSpacing:4,color:"#f5c842",marginBottom:4}}>COMMAND CENTER</div>
+          <div style={{fontSize:"0.75rem",color:"rgba(245,200,66,0.6)",letterSpacing:1}}>Air horn · Razz · Hype · Upload slips & photos</div>
+        </button>
+
+        <button onClick={onCave} style={{width:"100%",padding:"28px 20px",background:"linear-gradient(135deg,#00100a,#001a10)",border:"2px solid #00e676",borderRadius:16,cursor:"pointer",textAlign:"left",position:"relative",overflow:"hidden",boxShadow:"0 8px 30px rgba(0,230,118,0.1)"}}>
+          <div style={{position:"absolute",right:16,top:"50%",transform:"translateY(-50%)",fontSize:"3rem",opacity:0.15}}>🏀</div>
+          <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"1.6rem",letterSpacing:4,color:"#00e676",marginBottom:4}}>ENTER THE CAVE</div>
+          <div style={{fontSize:"0.75rem",color:"rgba(0,230,118,0.6)",letterSpacing:1}}>Live odds · Scores · Oracle · Leaderboard</div>
+        </button>
+      </div>
+
+      <div style={{marginTop:30,fontSize:"0.62rem",color:"#252538",letterSpacing:2}}>SNYDERSGAMBLINGCAVE.COM</div>
+    </div>
+  );
+}
+
+// ── Mobile Command Center ─────────────────────────────────────
+function MobileCommand({ goBack }) {
   const [name, setName] = useState(() => { try { return localStorage.getItem("cave_mobile_name") || ""; } catch { return ""; } });
   const [editingName, setEditingName] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [flashMsg, setFlashMsg] = useState(null);
-  const [showMediaChoice, setShowMediaChoice] = useState(null); // "photo" | "slip"
+  const [showMediaChoice, setShowMediaChoice] = useState(null);
   const cameraRef = useRef();
   const galleryRef = useRef();
   const cameraSlipRef = useRef();
   const gallerySlipRef = useRef();
-
-  const flash = (msg, color="#00e676") => {
-    setFlashMsg({ msg, color });
-    setTimeout(() => setFlashMsg(null), 3000);
-  };
-
-  const saveName = (n) => {
-    setName(n);
-    try { localStorage.setItem("cave_mobile_name", n); } catch {}
-  };
-
-  // ── Photo upload ──
   const [pendingPhotoFiles, setPendingPhotoFiles] = useState([]);
   const [photoCaption, setPhotoCaption] = useState("");
   const [showCaptionInput, setShowCaptionInput] = useState(false);
 
+  const flash = (msg, color="#00e676") => { setFlashMsg({msg,color}); setTimeout(()=>setFlashMsg(null),3000); };
+  const saveName = (n) => { setName(n); try { localStorage.setItem("cave_mobile_name",n); } catch {} };
+
   const handlePhotos = async (e) => {
-    const files = Array.from(e.target.files);
-    if (!files.length) return;
-    e.target.value = "";
-    setShowMediaChoice(null);
-    setPendingPhotoFiles(files);
-    setPhotoCaption("");
-    setShowCaptionInput(true);
+    const files = Array.from(e.target.files); if(!files.length) return;
+    e.target.value=""; setShowMediaChoice(null); setPendingPhotoFiles(files); setPhotoCaption(""); setShowCaptionInput(true);
   };
-
   const submitPhotos = async (caption) => {
-    setShowCaptionInput(false);
-    setUploading(true);
-    for (const file of pendingPhotoFiles) {
-      const base64 = await resizeToBase64(file, 500, 0.75);
-      await push(dbRef(db, "photos"), {
-        base64, label: name || "CAVE CREW", caption: caption || "From the party 🎉", ts: Date.now()
-      });
+    setShowCaptionInput(false); setUploading(true);
+    for(const file of pendingPhotoFiles){
+      const base64 = await resizeToBase64(file,500,0.75);
+      await push(dbRef(db,"photos"),{base64,label:name||"CAVE CREW",caption:caption||"From the party 🎉",ts:Date.now()});
     }
-    setUploading(false);
-    setPendingPhotoFiles([]);
-    flash(`${pendingPhotoFiles.length || 1} photo${(pendingPhotoFiles.length||1) > 1 ? "s" : ""} on the wall! 📸`);
+    setUploading(false); setPendingPhotoFiles([]);
+    flash(`${pendingPhotoFiles.length||1} photo${(pendingPhotoFiles.length||1)>1?"s":""} on the wall! 📸`);
   };
-
-  // ── Slip upload ──
   const handleSlip = async (e) => {
-    const files = Array.from(e.target.files);
-    if (!files.length) return;
-    e.target.value = "";
-    setShowMediaChoice(null);
-    setUploading(true);
-    for (const file of files) {
-      await uploadSlipToFirebase(file, name || "Anonymous");
-    }
-    setUploading(false);
-    flash("Slip submitted! Oracle is reading it 🔮", "#f5c842");
+    const files = Array.from(e.target.files); if(!files.length) return;
+    e.target.value=""; setShowMediaChoice(null); setUploading(true);
+    for(const file of files){ await uploadSlipToFirebase(file,name||"Anonymous"); }
+    setUploading(false); flash("Slip submitted! Oracle is reading it 🔮","#f5c842");
   };
-
-  const displayName = name.trim() || "Anonymous";
   const isSaved = !!name.trim();
 
   return (
-    <div style={{background:"#07070f",minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",padding:"20px 16px 40px",fontFamily:"Oswald,sans-serif",color:"#e8e8f0",maxWidth:480,margin:"0 auto"}}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Oswald:wght@400;600&family=Source+Code+Pro:wght@400;600&display=swap');*{box-sizing:border-box;margin:0;padding:0;}`}</style>
+    <div style={{background:"#07070f",minHeight:"100vh",fontFamily:"Oswald,sans-serif",color:"#e8e8f0",maxWidth:480,margin:"0 auto",paddingBottom:40}}>
+      <style>{`*{box-sizing:border-box;margin:0;padding:0;}input,button{-webkit-appearance:none;}`}</style>
 
-      {/* HEADER */}
-      <div style={{textAlign:"center",marginBottom:22,width:"100%"}}>
-        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"2rem",letterSpacing:4,background:"linear-gradient(135deg,#f5c842,#ff9800)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>SNYDERS GAMBLING CAVE</div>
-        <div style={{fontSize:"0.68rem",color:"#6a6a8a",letterSpacing:2,marginTop:2}}>DADCHELOR COMMAND CENTER</div>
+      {/* Header */}
+      <div style={{background:"linear-gradient(135deg,#0f0f1a,#1a102a)",borderBottom:"2px solid #f5c842",padding:"14px 16px",display:"flex",alignItems:"center",gap:12,position:"sticky",top:0,zIndex:50}}>
+        <button onClick={goBack} style={{background:"none",border:"none",color:"#f5c842",fontSize:"1.2rem",cursor:"pointer",padding:"4px 8px"}}>‹</button>
+        <div>
+          <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"1.3rem",letterSpacing:4,color:"#f5c842"}}>COMMAND CENTER</div>
+          <div style={{fontSize:"0.6rem",color:"#6a6a8a",letterSpacing:2}}>SNYDERS GAMBLING CAVE</div>
+        </div>
+        {isSaved && <div style={{marginLeft:"auto",fontFamily:"'Bebas Neue',sans-serif",fontSize:"0.85rem",color:"#f5c842",background:"rgba(245,200,66,0.1)",border:"1px solid rgba(245,200,66,0.3)",borderRadius:20,padding:"3px 10px"}}>{name}</div>}
       </div>
 
-      {/* NAME BADGE */}
-      <div style={{width:"100%",marginBottom:18}}>
+      <div style={{padding:"16px"}}>
+        {/* Name badge */}
         {!editingName ? (
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:"#161624",border:`1px solid ${isSaved?"#f5c842":"#252538"}`,borderRadius:10,padding:"10px 14px"}} onClick={()=>setEditingName(true)}>
+          <div onClick={()=>setEditingName(true)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:"#161624",border:`1px solid ${isSaved?"#f5c842":"#252538"}`,borderRadius:10,padding:"10px 14px",marginBottom:14,cursor:"pointer"}}>
             <div>
-              <div style={{fontSize:"0.62rem",color:"#6a6a8a",letterSpacing:2,marginBottom:2}}>PLAYING AS</div>
-              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"1.2rem",letterSpacing:2,color:isSaved?"#f5c842":"#6a6a8a"}}>{isSaved ? displayName : "TAP TO SET YOUR NAME"}</div>
+              <div style={{fontSize:"0.58rem",color:"#6a6a8a",letterSpacing:2,marginBottom:1}}>PLAYING AS</div>
+              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"1.1rem",letterSpacing:2,color:isSaved?"#f5c842":"#6a6a8a"}}>{isSaved?name.trim():"TAP TO SET YOUR NAME"}</div>
             </div>
-            <div style={{color:"#6a6a8a",fontSize:"0.75rem"}}>✎</div>
+            <span style={{color:"#6a6a8a",fontSize:"0.8rem"}}>✎</span>
           </div>
         ) : (
-          <div style={{background:"#161624",border:"1px solid #f5c842",borderRadius:10,padding:"12px 14px"}}>
-            <div style={{fontSize:"0.62rem",color:"#f5c842",letterSpacing:2,marginBottom:8}}>YOUR NAME</div>
-            <input
-              value={name} onChange={e=>saveName(e.target.value)}
-              onKeyDown={e=>e.key==="Enter"&&setEditingName(false)}
-              placeholder="Enter your name..."
-              autoFocus
-              style={{width:"100%",background:"#0f0f1a",border:"1px solid #252538",borderRadius:6,padding:"10px 12px",color:"#e8e8f0",fontFamily:"Oswald,sans-serif",fontSize:"1rem",marginBottom:8}}
-            />
-            <button onClick={()=>setEditingName(false)} style={{width:"100%",padding:"9px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:2,background:"#f5c842",color:"#000",border:"none",borderRadius:6,cursor:"pointer",fontSize:"1rem"}}>
-              LOCKED IN ✓
-            </button>
+          <div style={{background:"#161624",border:"1px solid #f5c842",borderRadius:10,padding:"12px 14px",marginBottom:14}}>
+            <div style={{fontSize:"0.58rem",color:"#f5c842",letterSpacing:2,marginBottom:6}}>YOUR NAME</div>
+            <input value={name} onChange={e=>saveName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&setEditingName(false)}
+              placeholder="Enter your name..." autoFocus
+              style={{width:"100%",background:"#0f0f1a",border:"1px solid #252538",borderRadius:6,padding:"10px 12px",color:"#e8e8f0",fontSize:"1rem",marginBottom:8}} />
+            <button onClick={()=>setEditingName(false)} style={{width:"100%",padding:"9px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:2,background:"#f5c842",color:"#000",border:"none",borderRadius:6,cursor:"pointer",fontSize:"0.95rem"}}>LOCKED IN ✓</button>
           </div>
         )}
-      </div>
 
-      {/* CAPTION INPUT */}
-      {showCaptionInput && (
-        <div style={{width:"100%",background:"#161624",border:"1px solid #f5c842",borderRadius:10,padding:"14px 16px",marginBottom:14}}>
-          <div style={{fontFamily:"'Bebas Neue',sans-serif",letterSpacing:2,color:"#f5c842",marginBottom:8,fontSize:"1rem"}}>ADD A CAPTION 📸</div>
-          <input value={photoCaption} onChange={e=>setPhotoCaption(e.target.value)}
-            placeholder="What's happening here? (optional)"
-            style={{width:"100%",background:"#0f0f1a",border:"1px solid #252538",borderRadius:6,padding:"10px 12px",color:"#e8e8f0",fontFamily:"Oswald,sans-serif",fontSize:"0.95rem",marginBottom:10}} />
-          <div style={{display:"flex",gap:6}}>
-            <button onClick={()=>submitPhotos(photoCaption)} style={{flex:2,padding:"10px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:2,background:"#f5c842",color:"#000",border:"none",borderRadius:6,cursor:"pointer",fontSize:"0.95rem"}}>POST IT 🔥</button>
-            <button onClick={()=>submitPhotos("")} style={{flex:1,padding:"10px",fontFamily:"'Bebas Neue',sans-serif",background:"transparent",color:"#6a6a8a",border:"1px solid #252538",borderRadius:6,cursor:"pointer",fontSize:"0.85rem"}}>SKIP</button>
+        {/* Caption input */}
+        {showCaptionInput && (
+          <div style={{background:"#161624",border:"1px solid #f5c842",borderRadius:10,padding:"14px",marginBottom:14}}>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",letterSpacing:2,color:"#f5c842",marginBottom:8}}>ADD A CAPTION 📸</div>
+            <input value={photoCaption} onChange={e=>setPhotoCaption(e.target.value)} placeholder="What's happening here? (optional)"
+              style={{width:"100%",background:"#0f0f1a",border:"1px solid #252538",borderRadius:6,padding:"10px 12px",color:"#e8e8f0",fontSize:"0.95rem",marginBottom:8}} />
+            <div style={{display:"flex",gap:6}}>
+              <button onClick={()=>submitPhotos(photoCaption)} style={{flex:2,padding:"10px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:2,background:"#f5c842",color:"#000",border:"none",borderRadius:6,cursor:"pointer"}}>POST IT 🔥</button>
+              <button onClick={()=>submitPhotos("")} style={{flex:1,padding:"10px",fontFamily:"'Bebas Neue',sans-serif",background:"transparent",color:"#6a6a8a",border:"1px solid #252538",borderRadius:6,cursor:"pointer"}}>SKIP</button>
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* FLASH MESSAGE */}
-      {flashMsg && (
-        <div style={{width:"100%",background:flashMsg.color==="red"?"#b71c1c":`${flashMsg.color}22`,border:`1px solid ${flashMsg.color}`,borderRadius:10,padding:"12px 16px",textAlign:"center",marginBottom:14,fontFamily:"'Bebas Neue',sans-serif",fontSize:"1.1rem",letterSpacing:2,color:flashMsg.color}}>
-          {flashMsg.msg}
-        </div>
-      )}
+        {/* Status messages */}
+        {flashMsg && <div style={{background:`${flashMsg.color}18`,border:`1px solid ${flashMsg.color}`,borderRadius:10,padding:"12px 16px",textAlign:"center",marginBottom:12,fontFamily:"'Bebas Neue',sans-serif",fontSize:"1rem",letterSpacing:2,color:flashMsg.color}}>{flashMsg.msg}</div>}
+        {uploading && <div style={{background:"rgba(245,200,66,0.08)",border:"1px solid #f5c842",borderRadius:10,padding:"12px",textAlign:"center",marginBottom:12,fontFamily:"'Bebas Neue',sans-serif",letterSpacing:2,color:"#f5c842",fontSize:"0.9rem"}}>⏳ UPLOADING...</div>}
 
-      {/* UPLOADING */}
-      {uploading && (
-        <div style={{width:"100%",background:"rgba(245,200,66,0.08)",border:"1px solid #f5c842",borderRadius:10,padding:"12px 16px",textAlign:"center",marginBottom:14,fontFamily:"'Bebas Neue',sans-serif",fontSize:"1rem",letterSpacing:2,color:"#f5c842"}}>
-          ⏳ UPLOADING TO THE CAVE...
-        </div>
-      )}
-
-      {/* MEDIA CHOICE SHEET */}
-      {showMediaChoice && (
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:200,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={()=>setShowMediaChoice(null)}>
-          <div style={{background:"#161624",border:"1px solid #252538",borderRadius:"16px 16px 0 0",padding:"20px 20px 36px",width:"100%",maxWidth:480}} onClick={e=>e.stopPropagation()}>
-
-            {/* RAZZ MENU */}
-            {showMediaChoice === "razz" && <>
-              <div style={{fontFamily:"'Bebas Neue',sans-serif",letterSpacing:3,fontSize:"1.1rem",color:"#ff1744",textAlign:"center",marginBottom:16}}>😈 CHOOSE YOUR RAZZ</div>
-              {["CHECK YOUR SQUARES DADCHELOR!","YOUR BRACKET IS DEAD","SHOULDVE LISTENED TO THE CAVE","WHO PICKED THAT TEAM???","PORTFOLIO LOOKING ROUGH BRO","DADDY NEEDS A TIMEOUT","BIG YIKES FROM THE CAVE","WRONG PICK!","DRINK EVERY TIME YOURE WRONG","BOW DOWN TO THE CAVE ORACLE"].map((msg,i)=>(
-                <button key={i} onClick={()=>{ push(dbRef(db,"banners"),{msg,type:"razz",ts:Date.now()}); flash("RAZZ SENT! 😈","#ff1744"); setShowMediaChoice(null); }}
-                  style={{width:"100%",padding:"13px 16px",marginBottom:8,fontFamily:"'Bebas Neue',sans-serif",letterSpacing:1,fontSize:"1rem",background:"rgba(255,23,68,0.1)",color:"#ff1744",border:"1px solid rgba(255,23,68,0.3)",borderRadius:8,cursor:"pointer",textAlign:"left"}}>
-                  {msg}
-                </button>
-              ))}
-            </>}
-
-            {/* HYPE MENU */}
-            {showMediaChoice === "hype" && <>
-              <div style={{fontFamily:"'Bebas Neue',sans-serif",letterSpacing:3,fontSize:"1.1rem",color:"#00e676",textAlign:"center",marginBottom:16}}>🎉 CHOOSE YOUR HYPE</div>
-              {["LETS GOOOOO!","WERE PRINTING MONEY!","CAVE PREDICTS AGAIN!","CASH THAT TICKET!","WE RIDE TOGETHER!","BRACKET KING!","MONEY PRINTER GO BRRR","CAVE NEVER MISSES","RETIRE OFF THIS ONE","GOAT BEHAVIOR"].map((msg,i)=>(
-                <button key={i} onClick={()=>{ push(dbRef(db,"banners"),{msg,type:"hype",ts:Date.now()}); flash("HYPE SENT! 🎉","#00e676"); setShowMediaChoice(null); }}
-                  style={{width:"100%",padding:"13px 16px",marginBottom:8,fontFamily:"'Bebas Neue',sans-serif",letterSpacing:1,fontSize:"1rem",background:"rgba(0,230,118,0.1)",color:"#00e676",border:"1px solid rgba(0,230,118,0.3)",borderRadius:8,cursor:"pointer",textAlign:"left"}}>
-                  {msg}
-                </button>
-              ))}
-            </>}
-
-            {/* PHOTO / SLIP MENU */}
-            {(showMediaChoice === "photo" || showMediaChoice === "slip") && <>
-              <div style={{fontFamily:"'Bebas Neue',sans-serif",letterSpacing:3,fontSize:"1.1rem",color:"#f5c842",textAlign:"center",marginBottom:16}}>
-                {showMediaChoice === "photo" ? "ADD TO WALL OF SHAME" : "UPLOAD BET SLIP"}
-              </div>
-              <button onClick={()=>{ showMediaChoice==="photo" ? cameraRef.current?.click() : cameraSlipRef.current?.click(); }} style={{width:"100%",padding:"16px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:2,fontSize:"1.1rem",background:"#0f0f1a",color:"#e8e8f0",border:"1px solid #252538",borderRadius:10,cursor:"pointer",marginBottom:10,display:"flex",alignItems:"center",gap:12,justifyContent:"center"}}>
-                <span style={{fontSize:"1.5rem"}}>📷</span> TAKE PHOTO
-              </button>
-              <button onClick={()=>{ showMediaChoice==="photo" ? galleryRef.current?.click() : gallerySlipRef.current?.click(); }} style={{width:"100%",padding:"16px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:2,fontSize:"1.1rem",background:"#0f0f1a",color:"#e8e8f0",border:"1px solid #252538",borderRadius:10,cursor:"pointer",display:"flex",alignItems:"center",gap:12,justifyContent:"center"}}>
-                <span style={{fontSize:"1.5rem"}}>🖼️</span> CHOOSE FROM GALLERY
-              </button>
-            </>}
-
-            {/* BACK BUTTON */}
-            <button onClick={()=>setShowMediaChoice(null)} style={{width:"100%",padding:"12px",marginTop:10,fontFamily:"'Bebas Neue',sans-serif",letterSpacing:2,fontSize:"0.9rem",background:"transparent",color:"#6a6a8a",border:"1px solid #252538",borderRadius:10,cursor:"pointer"}}>
-              ← BACK
+        {/* Action buttons */}
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          <button onClick={playAirhornSound} style={{padding:"20px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:4,fontSize:"1.8rem",background:"linear-gradient(135deg,#ff6f00,#ff1744)",color:"#fff",border:"none",borderRadius:12,cursor:"pointer",boxShadow:"0 4px 24px rgba(255,23,68,0.35)"}}>
+            📣 AIR HORN
+          </button>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <button onClick={()=>setShowMediaChoice("razz")} style={{padding:"16px 8px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:2,fontSize:"1.1rem",background:"linear-gradient(135deg,#1a0505,#3a0a0a)",color:"#ff1744",border:"2px solid #ff1744",borderRadius:12,cursor:"pointer"}}>
+              😈 RAZZ<div style={{fontSize:"0.55rem",color:"rgba(255,80,80,0.6)",letterSpacing:1,marginTop:2,fontFamily:"Oswald,sans-serif",fontWeight:400}}>Pick a message</div>
+            </button>
+            <button onClick={()=>setShowMediaChoice("hype")} style={{padding:"16px 8px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:2,fontSize:"1.1rem",background:"linear-gradient(135deg,#051a05,#0a3a0a)",color:"#00e676",border:"2px solid #00e676",borderRadius:12,cursor:"pointer"}}>
+              🎉 HYPE<div style={{fontSize:"0.55rem",color:"rgba(0,200,100,0.6)",letterSpacing:1,marginTop:2,fontFamily:"Oswald,sans-serif",fontWeight:400}}>Pick a message</div>
             </button>
           </div>
+          <button onClick={()=>setShowMediaChoice("slip")} style={{padding:"18px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:3,fontSize:"1.3rem",background:"linear-gradient(135deg,#0a1a0a,#0d2e0d)",color:"#00e676",border:"2px solid rgba(0,230,118,0.5)",borderRadius:12,cursor:"pointer"}}>
+            🎰 SUBMIT BET SLIP
+            <div style={{fontSize:"0.6rem",color:"#6a6a8a",letterSpacing:1,marginTop:2,fontFamily:"Oswald,sans-serif",fontWeight:400}}>AI reads your slip automatically</div>
+          </button>
+          <button onClick={()=>setShowMediaChoice("photo")} style={{padding:"18px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:3,fontSize:"1.3rem",background:"linear-gradient(135deg,#1a0e2e,#2a1050)",color:"#f5c842",border:"2px solid rgba(245,200,66,0.5)",borderRadius:12,cursor:"pointer"}}>
+            📸 WALL OF SHAME
+            <div style={{fontSize:"0.6rem",color:"#6a6a8a",letterSpacing:1,marginTop:2,fontFamily:"Oswald,sans-serif",fontWeight:400}}>Goes live on the main screen instantly</div>
+          </button>
+        </div>
+      </div>
+
+      {/* Bottom sheet */}
+      {showMediaChoice && (
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",zIndex:200,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={()=>setShowMediaChoice(null)}>
+          <div style={{background:"#0f0f1a",border:"1px solid #252538",borderRadius:"20px 20px 0 0",padding:"20px 20px 44px",width:"100%",maxWidth:480,maxHeight:"85vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
+            {showMediaChoice==="razz" && <>
+              <div style={{fontFamily:"'Bebas Neue',sans-serif",letterSpacing:3,fontSize:"1.1rem",color:"#ff1744",textAlign:"center",marginBottom:14}}>😈 CHOOSE YOUR RAZZ</div>
+              {["CHECK YOUR SQUARES DADCHELOR!","YOUR BRACKET IS DEAD","SHOULDVE LISTENED TO THE CAVE","WHO PICKED THAT TEAM???","PORTFOLIO LOOKING ROUGH BRO","DADDY NEEDS A TIMEOUT","BIG YIKES FROM THE CAVE","WRONG PICK!","DRINK EVERY TIME YOURE WRONG","BOW DOWN TO THE CAVE ORACLE"].map((msg,i)=>(
+                <button key={i} onClick={()=>{push(dbRef(db,"banners"),{msg,type:"razz",ts:Date.now()});flash("RAZZ SENT! 😈","#ff1744");setShowMediaChoice(null);}}
+                  style={{width:"100%",padding:"14px 16px",marginBottom:8,fontFamily:"'Bebas Neue',sans-serif",letterSpacing:1,fontSize:"0.95rem",background:"rgba(255,23,68,0.08)",color:"#ff1744",border:"1px solid rgba(255,23,68,0.25)",borderRadius:8,cursor:"pointer",textAlign:"left"}}>
+                  {msg}
+                </button>
+              ))}
+            </>}
+            {showMediaChoice==="hype" && <>
+              <div style={{fontFamily:"'Bebas Neue',sans-serif",letterSpacing:3,fontSize:"1.1rem",color:"#00e676",textAlign:"center",marginBottom:14}}>🎉 CHOOSE YOUR HYPE</div>
+              {["LETS GOOOOO!","WERE PRINTING MONEY!","CAVE PREDICTS AGAIN!","CASH THAT TICKET!","WE RIDE TOGETHER!","BRACKET KING!","MONEY PRINTER GO BRRR","CAVE NEVER MISSES","RETIRE OFF THIS ONE","GOAT BEHAVIOR"].map((msg,i)=>(
+                <button key={i} onClick={()=>{push(dbRef(db,"banners"),{msg,type:"hype",ts:Date.now()});flash("HYPE SENT! 🎉","#00e676");setShowMediaChoice(null);}}
+                  style={{width:"100%",padding:"14px 16px",marginBottom:8,fontFamily:"'Bebas Neue',sans-serif",letterSpacing:1,fontSize:"0.95rem",background:"rgba(0,230,118,0.08)",color:"#00e676",border:"1px solid rgba(0,230,118,0.25)",borderRadius:8,cursor:"pointer",textAlign:"left"}}>
+                  {msg}
+                </button>
+              ))}
+            </>}
+            {(showMediaChoice==="photo"||showMediaChoice==="slip") && <>
+              <div style={{fontFamily:"'Bebas Neue',sans-serif",letterSpacing:3,fontSize:"1.1rem",color:"#f5c842",textAlign:"center",marginBottom:14}}>
+                {showMediaChoice==="photo"?"📸 ADD TO WALL OF SHAME":"🎰 UPLOAD BET SLIP"}
+              </div>
+              <button onClick={()=>{showMediaChoice==="photo"?cameraRef.current?.click():cameraSlipRef.current?.click();}} style={{width:"100%",padding:"16px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:2,fontSize:"1rem",background:"#161624",color:"#e8e8f0",border:"1px solid #252538",borderRadius:10,cursor:"pointer",marginBottom:10,display:"flex",alignItems:"center",gap:12,justifyContent:"center"}}>
+                <span style={{fontSize:"1.4rem"}}>📷</span> TAKE PHOTO
+              </button>
+              <button onClick={()=>{showMediaChoice==="photo"?galleryRef.current?.click():gallerySlipRef.current?.click();}} style={{width:"100%",padding:"16px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:2,fontSize:"1rem",background:"#161624",color:"#e8e8f0",border:"1px solid #252538",borderRadius:10,cursor:"pointer",display:"flex",alignItems:"center",gap:12,justifyContent:"center"}}>
+                <span style={{fontSize:"1.4rem"}}>🖼️</span> CHOOSE FROM GALLERY
+              </button>
+            </>}
+            <button onClick={()=>setShowMediaChoice(null)} style={{width:"100%",padding:"12px",marginTop:10,fontFamily:"'Bebas Neue',sans-serif",letterSpacing:2,fontSize:"0.85rem",background:"transparent",color:"#6a6a8a",border:"1px solid #252538",borderRadius:10,cursor:"pointer"}}>← BACK</button>
+          </div>
         </div>
       )}
 
-      {/* HIDDEN FILE INPUTS — camera vs gallery, photo vs slip */}
-      <input ref={cameraRef}   type="file" accept="image/*" capture="environment" multiple style={{display:"none"}} onChange={handlePhotos} />
-      <input ref={galleryRef}  type="file" accept="image/*" multiple            style={{display:"none"}} onChange={handlePhotos} />
+      {/* Hidden inputs */}
+      <input ref={cameraRef}      type="file" accept="image/*" capture="environment" multiple style={{display:"none"}} onChange={handlePhotos} />
+      <input ref={galleryRef}     type="file" accept="image/*" multiple             style={{display:"none"}} onChange={handlePhotos} />
       <input ref={cameraSlipRef}  type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={handleSlip} />
       <input ref={gallerySlipRef} type="file" accept="image/*"                       style={{display:"none"}} onChange={handleSlip} />
+    </div>
+  );
+}
 
-      {/* ACTION BUTTONS */}
-      <div style={{width:"100%",display:"flex",flexDirection:"column",gap:10}}>
+// ── Mobile Cave View ──────────────────────────────────────────
+function MobileCave({ goBack }) {
+  const [tab, setTab] = useState("scores");
+  const { games, lastUpdate, error } = useOddsAPI(true);
+  const { scores, scoresError } = useESPNScores(true);
+  const [slips, setSlips] = useState([]);
+  const [oraclePicks, setOraclePicks] = useState([]);
+  const [oracleLoading, setOracleLoading] = useState(false);
 
-        {/* AIRHORN */}
-        <button onClick={playAirhornSound} style={{width:"100%",padding:"20px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:4,fontSize:"1.8rem",background:"linear-gradient(135deg,#ff6f00,#ff1744)",color:"#fff",border:"none",borderRadius:12,cursor:"pointer",boxShadow:"0 4px 24px rgba(255,23,68,0.4)"}}>
-          📣 AIR HORN
-        </button>
+  useEffect(()=>{
+    const r = dbRef(db,"slips");
+    const unsub = onValue(r,snap=>{
+      const val=snap.val(); if(!val){setSlips([]);return;}
+      setSlips(Object.entries(val).map(([fbKey,s])=>({...s,fbKey})).sort((a,b)=>(b.ts||0)-(a.ts||0)));
+    }); return ()=>unsub();
+  },[]);
 
-        {/* RAZZ */}
-        <button onClick={()=>setShowMediaChoice("razz")} style={{width:"100%",padding:"18px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:3,fontSize:"1.4rem",background:"linear-gradient(135deg,#1a0505,#3a0a0a)",color:"#ff1744",border:"2px solid #ff1744",borderRadius:12,cursor:"pointer",boxShadow:"0 4px 20px rgba(255,23,68,0.2)"}}>
-          😈 RAZZ THE DADCHELOR
-          <div style={{fontSize:"0.65rem",color:"rgba(255,100,100,0.7)",letterSpacing:1,marginTop:3,fontFamily:"Oswald,sans-serif",fontWeight:400}}>Pick what to say</div>
-        </button>
+  const fetchOracle = async () => {
+    if(oracleLoading) return; setOracleLoading(true);
+    const gameList = games.length ? games.slice(0,4).map(g=>`${g.team1} vs ${g.team2}`).join(", ") : "March Madness 2026 tournament games";
+    try {
+      const result = await callOracle(`Analyze: ${gameList}. Give 3 sharp picks for our dadchelor party crew. Be specific and funny.`);
+      setOraclePicks(result.picks||[]);
+    } catch(e) { console.error(e); }
+    setOracleLoading(false);
+  };
 
-        {/* CELEBRATE */}
-        <button onClick={()=>setShowMediaChoice("hype")} style={{width:"100%",padding:"18px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:3,fontSize:"1.4rem",background:"linear-gradient(135deg,#051a05,#0a3a0a)",color:"#00e676",border:"2px solid #00e676",borderRadius:12,cursor:"pointer",boxShadow:"0 4px 20px rgba(0,230,118,0.2)"}}>
-          🎉 CELEBRATE
-          <div style={{fontSize:"0.65rem",color:"rgba(0,200,100,0.7)",letterSpacing:1,marginTop:3,fontFamily:"Oswald,sans-serif",fontWeight:400}}>Pick what to say</div>
-        </button>
+  // Leaderboard from slips
+  const players = {};
+  slips.forEach(b=>{
+    if(!b.name||b.status==="pending") return;
+    if(!players[b.name]) players[b.name]={name:b.name,wins:0,losses:0,net:0};
+    const p=players[b.name]; const amt=parseFloat(b.amount)||0; const payout=parseFloat(b.payout)||0;
+    if(b.status==="won"){p.wins++;p.net+=payout;} if(b.status==="lost"){p.losses++;p.net-=amt;}
+  });
+  const sorted=Object.values(players).sort((a,b)=>b.net-a.net);
 
-        {/* BET SLIP */}
-        <button onClick={()=>setShowMediaChoice("slip")} style={{width:"100%",padding:"18px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:3,fontSize:"1.4rem",background:"linear-gradient(135deg,#0a1a0a,#0d2e0d)",color:"#00e676",border:"2px solid rgba(0,230,118,0.5)",borderRadius:12,cursor:"pointer"}}>
-          🎰 SUBMIT BET SLIP
-          <div style={{fontSize:"0.65rem",color:"#6a6a8a",letterSpacing:1,marginTop:3,fontFamily:"Oswald,sans-serif",fontWeight:400}}>AI reads your slip automatically</div>
-        </button>
+  const tabs = [{id:"scores",label:"🏀 SCORES"},{id:"odds",label:"📊 ODDS"},{id:"oracle",label:"🔮 ORACLE"},{id:"board",label:"🏆 BOARD"},{id:"slips",label:"🎰 SLIPS"}];
+  const statusColor={open:"#f5c842",won:"#00e676",lost:"#ff1744",push:"#6a6a8a",pending:"#252538"};
+  const statusLabel={open:"LIVE",won:"WON ✓",lost:"LOST ✗",push:"PUSH",pending:"⏳"};
 
-        {/* WALL OF SHAME */}
-        <button onClick={()=>setShowMediaChoice("photo")} style={{width:"100%",padding:"18px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:3,fontSize:"1.4rem",background:"linear-gradient(135deg,#1a0e2e,#2a1050)",color:"#f5c842",border:"2px solid rgba(245,200,66,0.5)",borderRadius:12,cursor:"pointer"}}>
-          📸 ADD TO WALL OF SHAME
-          <div style={{fontSize:"0.65rem",color:"#6a6a8a",letterSpacing:1,marginTop:3,fontFamily:"Oswald,sans-serif",fontWeight:400}}>Goes live on the main screen instantly</div>
-        </button>
+  return (
+    <div style={{background:"#07070f",minHeight:"100vh",fontFamily:"Oswald,sans-serif",color:"#e8e8f0",paddingBottom:80}}>
+      <style>{`*{box-sizing:border-box;margin:0;padding:0;}input,button{-webkit-appearance:none;}::-webkit-scrollbar{display:none;}`}</style>
 
-        {/* VIEW FULL CAVE */}
-        <a href="https://www.snydersgamblingcave.com?desktop=1" style={{display:"block",width:"100%",padding:"13px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:2,fontSize:"0.95rem",background:"transparent",color:"#6a6a8a",border:"1px solid #252538",borderRadius:10,cursor:"pointer",textAlign:"center",textDecoration:"none",marginTop:2}}>
-          VIEW FULL CAVE →
-        </a>
+      {/* Header */}
+      <div style={{background:"linear-gradient(135deg,#0f0f1a,#1a102a)",borderBottom:"2px solid #f5c842",padding:"12px 16px",display:"flex",alignItems:"center",gap:10,position:"sticky",top:0,zIndex:50}}>
+        <button onClick={goBack} style={{background:"none",border:"none",color:"#f5c842",fontSize:"1.3rem",cursor:"pointer",padding:"2px 8px"}}>‹</button>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"1.2rem",letterSpacing:4,color:"#f5c842"}}>THE CAVE</div>
+        <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:6}}>
+          <div style={{width:6,height:6,borderRadius:"50%",background:"#00e676",animation:"pulse 1s infinite"}} />
+          <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"0.75rem",color:"#00e676",letterSpacing:2}}>LIVE</span>
+        </div>
+      </div>
+
+      {/* Tab bar */}
+      <div style={{display:"flex",background:"#0a0a16",borderBottom:"1px solid #252538",overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
+        {tabs.map(t=>(
+          <button key={t.id} onClick={()=>setTab(t.id)} style={{flex:"0 0 auto",padding:"12px 14px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:1,fontSize:"0.78rem",background:"none",border:"none",borderBottom:`2px solid ${tab===t.id?"#f5c842":"transparent"}`,color:tab===t.id?"#f5c842":"#6a6a8a",cursor:"pointer",whiteSpace:"nowrap",transition:"color 0.2s"}}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div style={{padding:"14px 14px"}}>
+
+        {/* SCORES */}
+        {tab==="scores" && (
+          <div>
+            {!scores.length && <div style={{textAlign:"center",padding:40,color:"#6a6a8a",fontSize:"0.85rem"}}>No games live right now</div>}
+            {scores.map((s,i)=>(
+              <div key={i} style={{background:"#161624",border:"1px solid #252538",borderRadius:10,padding:"12px 14px",marginBottom:10}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                  <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"0.65rem",letterSpacing:2,color:s.status==="final"?"#6a6a8a":"#00e676",background:s.status==="final"?"#252538":"rgba(0,230,118,0.1)",padding:"2px 8px",borderRadius:10}}>{s.status==="final"?"FINAL":s.status==="in"?`Q${s.period||""} ${s.clock||"LIVE"}`:s.time||"UPCOMING"}</span>
+                  {s.network && <span style={{fontSize:"0.62rem",color:"#6a6a8a"}}>{s.network}</span>}
+                </div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    {s.logo1 && <img src={s.logo1} alt="" style={{width:28,height:28,objectFit:"contain"}} />}
+                    <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"1rem",letterSpacing:1}}>{s.team1}</span>
+                    {s.rank1 && <span style={{fontSize:"0.6rem",color:"#f5c842"}}>#{s.rank1}</span>}
+                  </div>
+                  <span style={{fontFamily:"'Source Code Pro',monospace",fontSize:"1.4rem",fontWeight:700,color:s.score1>s.score2?"#00e676":"#e8e8f0"}}>{s.score1??""}</span>
+                </div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    {s.logo2 && <img src={s.logo2} alt="" style={{width:28,height:28,objectFit:"contain"}} />}
+                    <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"1rem",letterSpacing:1}}>{s.team2}</span>
+                    {s.rank2 && <span style={{fontSize:"0.6rem",color:"#f5c842"}}>#{s.rank2}</span>}
+                  </div>
+                  <span style={{fontFamily:"'Source Code Pro',monospace",fontSize:"1.4rem",fontWeight:700,color:s.score2>s.score1?"#00e676":"#e8e8f0"}}>{s.score2??""}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ODDS */}
+        {tab==="odds" && (
+          <div>
+            {error && <div style={{color:"#ff1744",fontSize:"0.8rem",marginBottom:10}}>⚠ {error}</div>}
+            {!games.length && <div style={{textAlign:"center",padding:40,color:"#6a6a8a",fontSize:"0.85rem"}}>Loading odds...</div>}
+            {games.map((g,i)=>(
+              <div key={i} style={{background:"#161624",border:"1px solid #252538",borderRadius:10,padding:"12px 14px",marginBottom:10}}>
+                <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"0.95rem",letterSpacing:1,marginBottom:8,color:"#f5c842"}}>{g.team1} <span style={{color:"#6a6a8a"}}>vs</span> {g.team2}</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,fontSize:"0.72rem"}}>
+                  {[["SPREAD",g.spread,"#e8e8f0"],["O/U",g.ou,"#2979ff"],["ML",`${g.ml1>0?"+":""}${g.ml1||"?"}/${g.ml2>0?"+":""}${g.ml2||"?"}` ,"#00e676"]].map(([l,v,c])=>(
+                    <div key={l} style={{background:"#0f0f1a",borderRadius:6,padding:"6px 8px",textAlign:"center"}}>
+                      <div style={{color:"#6a6a8a",fontSize:"0.6rem",letterSpacing:1,marginBottom:2}}>{l}</div>
+                      <div style={{fontFamily:"'Source Code Pro',monospace",color:c,fontWeight:700}}>{v}</div>
+                    </div>
+                  ))}
+                </div>
+                {g.time && <div style={{fontSize:"0.62rem",color:"#6a6a8a",marginTop:6}}>{g.time}</div>}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ORACLE */}
+        {tab==="oracle" && (
+          <div>
+            <button onClick={fetchOracle} disabled={oracleLoading} style={{width:"100%",padding:"14px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:3,fontSize:"1.1rem",background:oracleLoading?"transparent":"#f5c842",color:oracleLoading?"#6a6a8a":"#000",border:`1px solid ${oracleLoading?"#252538":"#f5c842"}`,borderRadius:10,cursor:"pointer",marginBottom:14}}>
+              {oracleLoading?"🔮 READING THE LINES...":"🔮 CONSULT THE ORACLE"}
+            </button>
+            {!oraclePicks.length && !oracleLoading && <div style={{textAlign:"center",padding:30,color:"#6a6a8a",fontSize:"0.85rem"}}>Tap above to get today's best picks</div>}
+            {oraclePicks.map((p,i)=>(
+              <div key={i} style={{background:"#161624",border:`1px solid ${p.value==="HIGH"?"rgba(245,200,66,0.5)":"#252538"}`,borderRadius:10,padding:"12px 14px",marginBottom:10}}>
+                <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"1rem",color:p.value==="HIGH"?"#f5c842":"#e8e8f0",marginBottom:6}}>{p.pick}</div>
+                <div style={{height:3,background:"#252538",borderRadius:2,marginBottom:6}}><div style={{height:"100%",width:`${p.confidence}%`,background:"linear-gradient(90deg,#2979ff,#00e676)",borderRadius:2}} /></div>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:"0.72rem"}}>
+                  <span style={{color:"#6a6a8a"}}>{p.reasoning?.slice(0,80)}...</span>
+                  <span style={{color:"#00e676",fontFamily:"'Source Code Pro',monospace",flexShrink:0,marginLeft:8}}>{p.confidence}%</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* LEADERBOARD */}
+        {tab==="board" && (
+          <div>
+            {!sorted.length && <div style={{textAlign:"center",padding:40,color:"#6a6a8a",fontSize:"0.85rem"}}>No bets resolved yet</div>}
+            {sorted.map((p,idx)=>{
+              const medal=["🥇","🥈","🥉"][idx]||"";
+              const netColor=p.net>0?"#00e676":p.net<0?"#ff1744":"#6a6a8a";
+              return (
+                <div key={p.name} style={{background:"#161624",border:"1px solid #252538",borderRadius:10,padding:"12px 14px",marginBottom:8,display:"flex",alignItems:"center",gap:10}}>
+                  <span style={{fontSize:"1.4rem",width:30}}>{medal||`#${idx+1}`}</span>
+                  <div style={{flex:1}}>
+                    <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"1rem",letterSpacing:1}}>{p.name}</div>
+                    <div style={{fontSize:"0.68rem",color:"#6a6a8a"}}>{p.wins}W · {p.losses}L</div>
+                  </div>
+                  <div style={{fontFamily:"'Source Code Pro',monospace",fontWeight:700,color:netColor,fontSize:"1.1rem"}}>{p.net>=0?"+":""}${Math.abs(p.net).toFixed(0)}</div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* SLIPS */}
+        {tab==="slips" && (
+          <div>
+            {!slips.length && <div style={{textAlign:"center",padding:40,color:"#6a6a8a",fontSize:"0.85rem"}}>No slips uploaded yet</div>}
+            {slips.map(s=>(
+              <div key={s.fbKey} style={{background:"#161624",border:`1px solid ${statusColor[s.status]||"#252538"}33`,borderRadius:10,padding:"12px 14px",marginBottom:10}}>
+                <div style={{display:"flex",gap:8}}>
+                  {s.base64 && <img src={`data:image/jpeg;base64,${s.base64}`} alt="slip" style={{width:52,height:52,objectFit:"cover",borderRadius:6,flexShrink:0}} />}
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                      <span style={{fontFamily:"'Bebas Neue',sans-serif",color:"#f5c842",fontSize:"0.85rem"}}>{s.name}</span>
+                      <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"0.65rem",color:statusColor[s.status],letterSpacing:1}}>{statusLabel[s.status]}</span>
+                    </div>
+                    <div style={{fontSize:"0.8rem",color:"#e8e8f0",marginTop:2}}>{s.pick}</div>
+                    <div style={{fontSize:"0.68rem",color:"#6a6a8a",marginTop:2}}>Bet: <span style={{color:"#f5c842"}}>${s.amount}</span> · Win: <span style={{color:"#00e676"}}>${s.payout}</span> · <span style={{color:"#2979ff"}}>{s.odds}</span></div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
       </div>
     </div>
   );
 }
+
+// Legacy alias
+function MobileUpload() { return <MobileApp />; }
+
 
 
 // ============================================================
