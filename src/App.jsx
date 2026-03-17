@@ -659,11 +659,26 @@ function GameCard({ g, selected, onSelect }) {
 // ============================================================
 function VotePanel({ toast, onAddVote }) {
   const DEFAULT_VOTES = [
-    { id:"v1", type:"single", pick:"Duke ML vs Siena", odds:"-3500", yes:5, no:2, myVote:null },
-    { id:"v2", type:"single", pick:"TCU +3.5 vs Ohio State", odds:"-110", yes:3, no:4, myVote:null },
-    { id:"v3", type:"parlay", pick:"First Round Favorites Parlay", legs:[{pick:"Duke ML",odds:"-3500"},{pick:"Michigan ML",odds:"-2500"},{pick:"Florida ML",odds:"-4000"}], yes:7, no:1, myVote:null },
+    { id:"v1", type:"single", pick:"Duke ML vs Siena", odds:"-3500", yes:0, no:0, myVote:null },
+    { id:"v2", type:"single", pick:"TCU +3.5 vs Ohio State", odds:"-110", yes:0, no:0, myVote:null },
+    { id:"v3", type:"parlay", pick:"First Round Favorites Parlay", legs:[{pick:"Duke ML",odds:"-3500"},{pick:"Michigan ML",odds:"-2500"},{pick:"Florida ML",odds:"-4000"}], yes:0, no:0, myVote:null },
   ];
   const [votes, setVotes] = useState(DEFAULT_VOTES);
+
+  useEffect(() => {
+    const r = dbRef(db,"votes");
+    const unsub = onValue(r, snap => {
+      const val = snap.val();
+      if (val) setVotes(Object.values(val));
+    });
+    return () => unsub();
+  }, []);
+
+  const saveVotes = (newVotes) => {
+    setVotes(newVotes);
+    const obj = {}; newVotes.forEach(v => { obj[v.id] = v; });
+    set(dbRef(db,"votes"), obj);
+  };
   const [mode, setMode] = useState("single");
   const [newPick, setNewPick] = useState("");
   const [newOdds, setNewOdds] = useState("");
@@ -674,13 +689,13 @@ function VotePanel({ toast, onAddVote }) {
   useEffect(() => { if (onAddVote) onAddVote.current = addSingle; }, []);
 
   const castVote = (id, yn) => {
-    setVotes(v => v.map(x => x.id!==id||x.myVote ? x : {...x,[yn]:x[yn]+1,myVote:yn}));
+    saveVotes(votes.map(x => x.id!==id||x.myVote ? x : {...x,[yn]:x[yn]+1,myVote:yn}));
     toast(yn==="yes" ? "You are IN! 🤑" : "You folded. 😤");
   };
 
   const addSingle = (pick, odds) => {
     if (!pick?.trim()) return;
-    setVotes(v => [...v, {id:"v"+Date.now(),type:"single",pick:pick.trim(),odds:odds||"N/A",yes:0,no:0,myVote:null}]);
+    saveVotes([...votes, {id:"v"+Date.now(),type:"single",pick:pick.trim(),odds:odds||"N/A",yes:0,no:0,myVote:null}]);
   };
 
   const handleAddSingle = () => { addSingle(newPick, newOdds); setNewPick(""); setNewOdds(""); toast("Added to vote!"); };
@@ -688,7 +703,7 @@ function VotePanel({ toast, onAddVote }) {
   const addParlay = () => {
     const legs = parlayLegs.filter(l => l.pick.trim());
     if (!legs.length) return;
-    setVotes(v => [...v, {id:"v"+Date.now(),type:"parlay",pick:parlayName.trim()||`${legs.length}-Leg Parlay`,legs,yes:0,no:0,myVote:null}]);
+    saveVotes([...votes, {id:"v"+Date.now(),type:"parlay",pick:parlayName.trim()||`${legs.length}-Leg Parlay`,legs,yes:0,no:0,myVote:null}]);
     setParlayLegs([{pick:"",odds:""}]); setParlayName("");
     toast("Parlay added! 🎰");
   };
@@ -713,7 +728,7 @@ function VotePanel({ toast, onAddVote }) {
               <div style={{display:"flex",alignItems:"center",gap:6}}>
                 {po && <span style={{fontFamily:"'Source Code Pro',monospace",fontSize:"0.82rem",color:"#d500f9",fontWeight:700}}>{po}</span>}
                 {v.type==="single" && v.odds && <span style={{fontFamily:"'Source Code Pro',monospace",fontSize:"0.82rem",color:"#00e676",fontWeight:700}}>{v.odds}</span>}
-                <button onClick={()=>setVotes(x=>x.filter(y=>y.id!==v.id))} style={{background:"none",border:"none",color:"#6a6a8a",cursor:"pointer"}}>×</button>
+                <button onClick={()=>saveVotes(votes.filter(y=>y.id!==v.id))} style={{background:"none",border:"none",color:"#6a6a8a",cursor:"pointer"}}>×</button>
               </div>
             </div>
             {v.type==="parlay" && v.legs && (
@@ -848,8 +863,22 @@ function OraclePanel({ isLive, toast, games }) {
 function Ledger() {
   const [ledger, setLedger] = useState({bets:0,wins:0,losses:0,push:0,net:0});
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState({...ledger});
-  const save = () => { const b={}; Object.keys(draft).forEach(k=>{b[k]=parseFloat(draft[k])||0;}); setLedger(b); setEditing(false); };
+  const [draft, setDraft] = useState({bets:0,wins:0,losses:0,push:0,net:0});
+
+  useEffect(() => {
+    const r = dbRef(db, "ledger");
+    const unsub = onValue(r, snap => {
+      const val = snap.val();
+      if (val) { setLedger(val); setDraft(val); }
+    });
+    return () => unsub();
+  }, []);
+
+  const save = () => {
+    const b={}; Object.keys(draft).forEach(k=>{b[k]=parseFloat(draft[k])||0;});
+    setLedger(b); setEditing(false);
+    set(dbRef(db,"ledger"), b);
+  };
   const inp = {background:"#252538",border:"none",borderRadius:3,padding:"2px 6px",color:"#e8e8f0",fontFamily:"'Source Code Pro',monospace",fontWeight:700,width:70,fontSize:"0.82rem",textAlign:"right"};
   const netStr = `${ledger.net>=0?"+":""}$${Math.abs(ledger.net)}`;
   return (
@@ -1154,10 +1183,19 @@ function getYouTubeId(url) {
 const PLACEHOLDER_YT_ID = "dQw4w9WgXcQ"; // classic placeholder
 
 function HalftimePlayer({ toast }) {
-  const SAVED_URL = (() => { try { return localStorage.getItem("cave_yt_url") || ""; } catch { return ""; } })();
-  const [ytUrl, setYtUrl] = useState(SAVED_URL);
-  const [inputVal, setInputVal] = useState(SAVED_URL);
-  const [editing, setEditing] = useState(!SAVED_URL);
+  const [ytUrl, setYtUrl] = useState("");
+  const [inputVal, setInputVal] = useState("");
+  const [editing, setEditing] = useState(true);
+
+  useEffect(() => {
+    const r = dbRef(db, "ytUrl");
+    const unsub = onValue(r, snap => {
+      const val = snap.val() || "";
+      setYtUrl(val); setInputVal(val);
+      if (val) setEditing(false);
+    });
+    return () => unsub();
+  }, []);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const containerRef = useRef();
 
@@ -1170,13 +1208,13 @@ function HalftimePlayer({ toast }) {
       // clear back to placeholder
       setYtUrl("");
       setEditing(false);
-      try { localStorage.removeItem("cave_yt_url"); } catch {}
+      set(dbRef(db,"ytUrl"),"");
       return;
     }
     if (!id) { toast("Invalid YouTube URL — paste the full link"); return; }
     setYtUrl(inputVal);
     setEditing(false);
-    try { localStorage.setItem("cave_yt_url", inputVal); } catch {}
+    set(dbRef(db,"ytUrl"), inputVal);
     toast("Power Hour loaded! 🎉");
   };
 
@@ -1726,16 +1764,23 @@ const BRACKET_2026 = {
 };
 
 function useBracketState() {
-  const [bracket, setBracket] = useState(() => {
-    try {
-      const saved = localStorage.getItem("cave_bracket_2026");
-      return saved ? JSON.parse(saved) : null;
-    } catch { return null; }
-  });
+  const [bracket, setBracket] = useState(null);
+  const [loaded, setLoaded] = useState(false);
+
+  // Subscribe from Firebase
+  useEffect(() => {
+    const r = dbRef(db, "bracket2026");
+    const unsub = onValue(r, snap => {
+      const val = snap.val();
+      setBracket(val || null);
+      setLoaded(true);
+    });
+    return () => unsub();
+  }, []);
 
   const saveBracket = (b) => {
     setBracket(b);
-    try { localStorage.setItem("cave_bracket_2026", JSON.stringify(b)); } catch {}
+    set(dbRef(db, "bracket2026"), b).catch(e => console.error("Bracket save:", e));
   };
 
   // Build initial bracket state from template
@@ -1756,7 +1801,7 @@ function useBracketState() {
     return { regions, finalFour: [null,null,null,null], champion:null };
   };
 
-  const state = bracket || initBracket();
+  const state = (loaded && bracket) ? bracket : initBracket();
 
   const advance = (regionKey, roundIdx, gameIdx, winner) => {
     const next = JSON.parse(JSON.stringify(state));
@@ -1778,38 +1823,34 @@ function useBracketState() {
 
   const reset = () => { saveBracket(initBracket()); };
 
-  return { state, advance, reset };
+  return { state, advance, reset, loaded };
 }
 
-function BracketGame({ game, onWin, color, compact=false }) {
-  const [animIn, setAnimIn] = useState(false);
-  useEffect(() => { if (game.winner) { setAnimIn(true); } }, [game.winner]);
-
-  const teamStyle = (team, isWinner) => ({
+function BracketGame({ game, color, compact=false }) {
+  const teamStyle = (isWinner) => ({
     display:"flex", alignItems:"center", justifyContent:"space-between",
     padding: compact ? "4px 7px" : "6px 10px",
     background: isWinner ? `${color}22` : (game.winner && !isWinner ? "transparent" : "#0f0f1a"),
-    borderRadius:4, marginBottom:2, cursor: (!game.winner && team) ? "pointer" : "default",
-    opacity: game.winner && !isWinner ? 0.4 : 1,
-    border: isWinner ? `1px solid ${color}44` : "1px solid transparent",
-    transition:"all 0.3s",
+    borderRadius:4, marginBottom:2, cursor:"default",
+    opacity: game.winner && !isWinner ? 0.35 : 1,
+    border: isWinner ? `1px solid ${color}55` : "1px solid transparent",
+    transition:"all 0.5s",
   });
 
   const t1 = game.team1 || "TBD";
   const t2 = game.team2 || "TBD";
-  const canClick = !game.winner && game.team1 && game.team2;
 
   return (
-    <div style={{background:"#161624",border:"1px solid #252538",borderRadius:6,padding:compact?2:4,minWidth:compact?110:140,position:"relative",overflow:"hidden"}}>
-      {game.live && <div style={{position:"absolute",top:0,left:0,right:0,height:2,background:`linear-gradient(90deg,${color},transparent)`,animation:"pulse 1s infinite"}} />}
-      <div style={teamStyle(game.team1, game.winner===t1)} onClick={()=>canClick&&onWin&&onWin(t1)}>
-        <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:compact?"0.65rem":"0.75rem",letterSpacing:0.5,color:game.winner===t1?color:"#e8e8f0",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:compact?70:100}}>{t1}</span>
-        {game.score1!=null && <span style={{fontFamily:"'Source Code Pro',monospace",fontSize:"0.7rem",color:game.score1>game.score2?"#00e676":"#6a6a8a",marginLeft:4,flexShrink:0}}>{game.score1}</span>}
+    <div style={{background:"#161624",border:`1px solid ${game.winner?"#252538":"#1e1e30"}`,borderRadius:6,padding:compact?2:4,minWidth:compact?110:145,position:"relative",overflow:"hidden"}}>
+      {game.live && <div style={{position:"absolute",top:0,left:0,right:0,height:2,background:`linear-gradient(90deg,${color},${color}44,transparent)`,animation:"pulse 1s infinite"}} />}
+      <div style={teamStyle(game.winner===t1)}>
+        <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:compact?"0.65rem":"0.75rem",letterSpacing:0.5,color:game.winner===t1?color:"#e8e8f0",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:compact?72:105}}>{t1}</span>
+        {game.score1!=null && <span style={{fontFamily:"'Source Code Pro',monospace",fontSize:"0.7rem",color:game.score1>game.score2?"#00e676":"#6a6a8a",marginLeft:4,flexShrink:0,fontWeight:700}}>{game.score1}</span>}
       </div>
       <div style={{height:1,background:"#252538",margin:"1px 0"}} />
-      <div style={teamStyle(game.team2, game.winner===t2)} onClick={()=>canClick&&onWin&&onWin(t2)}>
-        <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:compact?"0.65rem":"0.75rem",letterSpacing:0.5,color:game.winner===t2?color:"#e8e8f0",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:compact?70:100}}>{t2}</span>
-        {game.score2!=null && <span style={{fontFamily:"'Source Code Pro',monospace",fontSize:"0.7rem",color:game.score2>game.score1?"#00e676":"#6a6a8a",marginLeft:4,flexShrink:0}}>{game.score2}</span>}
+      <div style={teamStyle(game.winner===t2)}>
+        <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:compact?"0.65rem":"0.75rem",letterSpacing:0.5,color:game.winner===t2?color:"#e8e8f0",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:compact?72:105}}>{t2}</span>
+        {game.score2!=null && <span style={{fontFamily:"'Source Code Pro',monospace",fontSize:"0.7rem",color:game.score2>game.score1?"#00e676":"#6a6a8a",marginLeft:4,flexShrink:0,fontWeight:700}}>{game.score2}</span>}
       </div>
     </div>
   );
@@ -1830,7 +1871,7 @@ function AdvancementPopup({ team, region, onDone }) {
   );
 }
 
-function BracketRegion({ regionKey, region, onAdvance, compact=false }) {
+function BracketRegion({ regionKey, region, compact=false }) {
   const rounds = region.rounds;
   const roundNames = ["R64","R32","S16","E8"];
   const gap = compact ? 4 : 8;
@@ -1847,7 +1888,7 @@ function BracketRegion({ regionKey, region, onAdvance, compact=false }) {
                   game={game}
                   color={region.color}
                   compact={compact}
-                  onWin={(winner) => onAdvance(regionKey, ri, gi, winner)}
+                  
                 />
               </div>
             ))}
@@ -1858,44 +1899,77 @@ function BracketRegion({ regionKey, region, onAdvance, compact=false }) {
   );
 }
 
-function BracketPanel({ scores }) {
-  const { state, advance, reset } = useBracketState();
-  const [popup, setPopup] = useState(null); // {team, region}
-  const [viewRegion, setViewRegion] = useState("east");
-  const prevWinnersRef = useRef({});
+// ESPN short name → bracket team name aliases
+const ESPN_ALIASES = {
+  "duke":"duke","ohio st":"ohio state","ohio state":"ohio state","tcu":"tcu",
+  "st. john's":"st. john's","st johns":"st. john's","northern iowa":"northern iowa",
+  "kansas":"kansas","cal baptist":"cal baptist","louisville":"louisville",
+  "usf":"usf","south florida":"usf","michigan st":"michigan state","michigan state":"michigan state",
+  "n. dakota st":"n. dakota st.","north dakota state":"n. dakota st.","ndsu":"n. dakota st.",
+  "ucla":"ucla","ucf":"ucf","uconn":"uconn","connecticut":"uconn","furman":"furman",
+  "arizona":"arizona","winthrop":"winthrop","miss. state":"miss. state","mississippi state":"miss. state",
+  "wake forest":"wake forest","oregon":"oregon","liberty":"liberty","baylor":"baylor","vermont":"vermont",
+  "marquette":"marquette","wisconsin":"wisconsin","quinnipiac":"quinnipiac",
+  "miami":"miami fl","miami (fl)":"miami fl","miami fl":"miami fl","miami (fla.)":"miami fl",
+  "missouri":"missouri","purdue":"purdue","queens":"queens",
+  "florida":"florida","clemson":"clemson","iowa":"iowa","vanderbilt":"vanderbilt",
+  "mcneese":"mcneese state","mcneese state":"mcneese state","nebraska":"nebraska","troy":"troy",
+  "north carolina":"n. carolina","unc":"n. carolina","n. carolina":"n. carolina",
+  "vcu":"vcu","illinois":"illinois","penn":"penn","saint mary's":"st. mary's","st. mary's":"st. mary's",
+  "texas a&m":"texas a&m","houston":"houston","siu":"siu-e","siue":"siu-e",
+  "michigan":"michigan","umbc":"umbc/howard","howard":"umbc/howard",
+  "georgia":"georgia","saint louis":"saint louis","st. louis":"saint louis",
+  "texas tech":"texas tech","akron":"akron","alabama":"alabama","hofstra":"hofstra",
+  "tennessee":"tennessee","miami (oh)":"miami oh/smu","wright st":"wright state","wright state":"wright state",
+  "kentucky":"kentucky","santa clara":"santa clara","iowa state":"iowa state","tennessee state":"tenn. state","tenn. state":"tenn. state",
+  "siena":"siena",
+};
 
-  // Auto-update bracket from ESPN live scores
+function normalizeTeam(name) {
+  if (!name) return "";
+  const n = name.toLowerCase().replace(/[^a-z0-9&\s]/g,"").trim();
+  return ESPN_ALIASES[n] || n;
+}
+
+function BracketPanel({ scores }) {
+  const { state, advance, reset, loaded } = useBracketState();
+  const [popup, setPopup] = useState(null);
+  const [viewRegion, setViewRegion] = useState("east");
+  const processedGames = useRef(new Set()); // track ESPN game IDs already processed
+
+  // Auto-update bracket from ESPN final scores
   useEffect(() => {
-    if (!scores.length) return;
+    if (!scores.length || !loaded) return;
     scores.forEach(g => {
       if (!g.isFinal) return;
-      const winner = g.homeScore > g.awayScore ? g.home : g.away;
-      const loser = g.homeScore > g.awayScore ? g.away : g.home;
-      // Try to match to a bracket game
+      if (processedGames.current.has(g.id)) return; // already handled
+      const espnWinner = normalizeTeam(g.homeScore >= g.awayScore ? g.home : g.away);
+      const espnLoser  = normalizeTeam(g.homeScore >= g.awayScore ? g.away : g.home);
+      let matched = false;
       Object.entries(state.regions).forEach(([rk, region]) => {
+        if (matched) return;
         region.rounds.forEach((round, ri) => {
+          if (matched) return;
           round.forEach((game, gi) => {
-            if (game.winner) return;
-            const t1 = (game.team1||"").toLowerCase().replace(/[^a-z]/g,"");
-            const t2 = (game.team2||"").toLowerCase().replace(/[^a-z]/g,"");
-            const w = winner.toLowerCase().replace(/[^a-z]/g,"");
-            const l = loser.toLowerCase().replace(/[^a-z]/g,"");
-            if ((t1.includes(w)||w.includes(t1.slice(0,4))) && (t2.includes(l)||l.includes(t2.slice(0,4)))) {
-              advance(rk, ri, gi, game.team1);
-            } else if ((t2.includes(w)||w.includes(t2.slice(0,4))) && (t1.includes(l)||l.includes(t1.slice(0,4)))) {
-              advance(rk, ri, gi, game.team2);
+            if (matched || game.winner) return;
+            const bt1 = normalizeTeam(game.team1);
+            const bt2 = normalizeTeam(game.team2);
+            if (!bt1 || !bt2 || bt1 === "tbd" || bt2 === "tbd") return;
+            const t1wins = bt1 === espnWinner && bt2 === espnLoser;
+            const t2wins = bt2 === espnWinner && bt1 === espnLoser;
+            if (t1wins || t2wins) {
+              matched = true;
+              processedGames.current.add(g.id);
+              const winner = t1wins ? game.team1 : game.team2;
+              advance(rk, ri, gi, winner);
+              const region = state.regions[rk];
+              setPopup({ team: winner, region: { name: region.name, color: region.color } });
             }
           });
         });
       });
     });
-  }, [scores]);
-
-  const handleAdvance = (regionKey, roundIdx, gameIdx, winner) => {
-    advance(regionKey, roundIdx, gameIdx, winner);
-    const region = state.regions[regionKey];
-    setPopup({ team: winner, region: { name: region.name, color: region.color } });
-  };
+  }, [scores, loaded]);
 
   const regions = Object.entries(state.regions);
   const currentRegion = state.regions[viewRegion];
@@ -1905,7 +1979,7 @@ function BracketPanel({ scores }) {
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
         <div style={{fontFamily:"'Bebas Neue',sans-serif",letterSpacing:3,fontSize:"1.1rem",color:"#f5c842"}}>2026 LIVE BRACKET</div>
         <div style={{display:"flex",gap:5,alignItems:"center"}}>
-          <span style={{fontSize:"0.65rem",color:"#6a6a8a"}}>Click a team to advance</span>
+          <span style={{fontSize:"0.65rem",color:"#6a6a8a"}}>Auto-updates from ESPN scores 📡</span>
           <button onClick={reset} style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"0.65rem",letterSpacing:1,padding:"3px 8px",background:"transparent",color:"#6a6a8a",border:"1px solid #252538",borderRadius:4,cursor:"pointer"}}>RESET</button>
         </div>
       </div>
@@ -1920,14 +1994,14 @@ function BracketPanel({ scores }) {
       </div>
 
       {/* Region bracket — scrollable horizontally */}
-      <div style={{overflowX:"auto",overflowY:"hidden",paddingBottom:8}}>
+      {!loaded && <div style={{textAlign:"center",padding:30,color:"#6a6a8a",fontSize:"0.85rem",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:2}}>LOADING BRACKET...</div>}
+      {loaded && <div style={{overflowX:"auto",overflowY:"hidden",paddingBottom:8}}>
         <BracketRegion
           regionKey={viewRegion}
           region={currentRegion}
-          onAdvance={handleAdvance}
           compact={false}
         />
-      </div>
+      </div>}
 
       {/* Final Four summary */}
       <div style={{marginTop:16,background:"#0f0f1a",border:"1px solid rgba(245,200,66,0.3)",borderRadius:8,padding:"10px 14px"}}>
@@ -2319,7 +2393,10 @@ export default function App() {
                   remove(dbRef(db,"slips")),
                   remove(dbRef(db,"photos")),
                   remove(dbRef(db,"banners")),
-                ]).then(()=>showToast("Cave reset. Starting fresh 🔄"));
+                  remove(dbRef(db,"ledger")),
+                  remove(dbRef(db,"votes")),
+                  remove(dbRef(db,"bracket2026")),
+                ]).then(()=>showToast("Cave fully reset. Starting fresh 🔄"));
               }} style={{width:"100%",padding:"8px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:1,fontSize:"0.78rem",background:"transparent",color:"#6a6a8a",border:"1px solid #252538",borderRadius:6,cursor:"pointer",marginTop:4}}>
                 🗑️ RESET CAVE DATA
               </button>
