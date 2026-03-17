@@ -29,7 +29,7 @@ const ANTHROPIC_HDR = {
   "anthropic-version": "2023-06-01",
   "anthropic-dangerous-direct-browser-access": "true",
 };
-const PARTY_DATE = new Date("2026-03-19T12:00:00-05:00");
+const PARTY_DATE = new Date("2026-03-19T12:15:00-05:00"); // Ohio State vs TCU tips first
 
 const INDIANA_IMG = "https://upload.wikimedia.org/wikipedia/commons/thumb/3/35/Indiana_Hoosiers_logo.svg/800px-Indiana_Hoosiers_logo.svg.png";
 const RANDY_GIF = "https://media1.tenor.com/m/NN89l8Ln8iIAAAAd/randy-marsh-south-park.gif";
@@ -659,9 +659,9 @@ function GameCard({ g, selected, onSelect }) {
 // ============================================================
 function VotePanel({ toast, onAddVote }) {
   const DEFAULT_VOTES = [
-    { id:"v1", type:"single", pick:"Duke ML", odds:"-150", yes:5, no:2, myVote:null },
-    { id:"v2", type:"single", pick:"Purdue -1.5", odds:"-110", yes:3, no:4, myVote:null },
-    { id:"v3", type:"parlay", pick:"Cave Parlay", legs:[{pick:"UConn ML",odds:"-130"},{pick:"Kansas -5.5",odds:"-110"},{pick:"Over 142",odds:"-108"}], yes:7, no:1, myVote:null },
+    { id:"v1", type:"single", pick:"Duke ML vs Siena", odds:"-3500", yes:5, no:2, myVote:null },
+    { id:"v2", type:"single", pick:"TCU +3.5 vs Ohio State", odds:"-110", yes:3, no:4, myVote:null },
+    { id:"v3", type:"parlay", pick:"First Round Favorites Parlay", legs:[{pick:"Duke ML",odds:"-3500"},{pick:"Michigan ML",odds:"-2500"},{pick:"Florida ML",odds:"-4000"}], yes:7, no:1, myVote:null },
   ];
   const [votes, setVotes] = useState(DEFAULT_VOTES);
   const [mode, setMode] = useState("single");
@@ -794,7 +794,7 @@ function OraclePanel({ isLive, toast, games }) {
     setLoading(true);
     const gameList = games.length
       ? games.slice(0,6).map(g=>`${g.team1} vs ${g.team2} (spread: ${g.spread}, O/U: ${g.ou})`).join(", ")
-      : "March Madness 2026 tournament games — analyze top matchups and find value bets";
+      : "2026 NCAA Tournament First Round: (1)Duke vs (16)Siena, (8)Ohio State vs (9)TCU, (4)Nebraska vs (13)Troy, (6)Louisville vs (11)USF, (5)Vanderbilt vs (12)McNeese State, (3)Michigan State vs (14)North Dakota St, (6)North Carolina vs (11)VCU, (3)Illinois vs (14)Penn, (7)St Marys vs (10)Texas A&M, (2)Houston vs (15)SIU Edwardsville, (1)Michigan vs (16)UMBC/Howard, (8)Georgia vs (9)Saint Louis, (5)Texas Tech vs (12)Akron, (4)Alabama vs (13)Hofstra, (6)Tennessee vs (11)Miami OH/SMU, (3)Virginia vs (14)Wright State, (7)Kentucky vs (10)Santa Clara, (2)Iowa State vs (15)Tennessee State, (1)Florida vs (16)PV/Lehigh, (8)Clemson vs (9)Iowa, (5)St Johns vs (12)Northern Iowa, (4)Kansas vs (13)Cal Baptist, (7)UCLA vs (10)UCF, (2)UConn vs (15)Furman, (1)Arizona vs (16)Winthrop, (8)Mississippi State vs (9)Wake Forest, (5)Oregon vs (12)Liberty, (4)Baylor vs (13)Vermont, (6)Marquette vs (11)Texas/NC State, (3)Wisconsin vs (14)Quinnipiac, (7)Miami FL vs (10)Missouri, (2)Purdue vs (15)Queens";
     try {
       const result = await callOracle(`Analyze: ${gameList}. Find the 4 best bets including parlay opportunities for our dadchelor party cave crew. Be specific, funny, and confident.`);
       setPicks(result.picks || []);
@@ -1502,7 +1502,7 @@ function MobileCave({ goBack }) {
 
   const fetchOracle = async () => {
     if(oracleLoading) return; setOracleLoading(true);
-    const gameList = games.length ? games.slice(0,4).map(g=>`${g.team1} vs ${g.team2}`).join(", ") : "March Madness 2026 tournament games";
+    const gameList = games.length ? games.slice(0,4).map(g=>`${g.team1} vs ${g.team2}`).join(", ") : "2026 NCAA Tournament: Duke vs Siena, Michigan vs UMBC/Howard, Florida vs PV/Lehigh, Arizona vs Winthrop, Ohio State vs TCU, Purdue vs Queens, UConn vs Furman, Iowa State vs Tennessee State, Houston vs SIU Edwardsville, Michigan State vs North Dakota State";
     try {
       const result = await callOracle(`Analyze: ${gameList}. Give 3 sharp picks for our dadchelor party crew. Be specific and funny.`);
       setOraclePicks(result.picks||[]);
@@ -1520,7 +1520,7 @@ function MobileCave({ goBack }) {
   });
   const sorted=Object.values(players).sort((a,b)=>b.net-a.net);
 
-  const tabs = [{id:"scores",label:"🏀 SCORES"},{id:"odds",label:"📊 ODDS"},{id:"oracle",label:"🔮 ORACLE"},{id:"board",label:"🏆 BOARD"},{id:"slips",label:"🎰 SLIPS"}];
+  const tabs = [{id:"scores",label:"🏀 SCORES"},{id:"odds",label:"📊 ODDS"},{id:"bracket",label:"🏀 BRACKET"},{id:"oracle",label:"🔮 ORACLE"},{id:"board",label:"🏆 BOARD"},{id:"slips",label:"🎰 SLIPS"}];
   const statusColor={open:"#f5c842",won:"#00e676",lost:"#ff1744",push:"#6a6a8a",pending:"#252538"};
   const statusLabel={open:"LIVE",won:"WON ✓",lost:"LOST ✗",push:"PUSH",pending:"⏳"};
 
@@ -1602,6 +1602,13 @@ function MobileCave({ goBack }) {
           </div>
         )}
 
+        {/* BRACKET */}
+        {tab==="bracket" && (
+          <div style={{overflowX:"auto"}}>
+            <BracketPanel scores={scores} />
+          </div>
+        )}
+
         {/* ORACLE */}
         {tab==="oracle" && (
           <div>
@@ -1674,6 +1681,279 @@ function MobileCave({ goBack }) {
 function MobileUpload() { return <MobileApp />; }
 
 
+
+
+// ============================================================
+// LIVE BRACKET — 2026 NCAA Tournament
+// ============================================================
+const BRACKET_2026 = {
+  east: {
+    name:"EAST",color:"#2979ff",
+    r1:[
+      ["(1) Duke","(16) Siena"],["(8) Ohio State","(9) TCU"],
+      ["(5) St. John's","(12) Northern Iowa"],["(4) Kansas","(13) Cal Baptist"],
+      ["(6) Louisville","(11) USF"],["(3) Michigan State","(14) N. Dakota St."],
+      ["(7) UCLA","(10) UCF"],["(2) UConn","(15) Furman"],
+    ]
+  },
+  west: {
+    name:"WEST",color:"#d500f9",
+    r1:[
+      ["(1) Arizona","(16) Winthrop"],["(8) Miss. State","(9) Wake Forest"],
+      ["(5) Oregon","(12) Liberty"],["(4) Baylor","(13) Vermont"],
+      ["(6) Marquette","(11) TX/NC State"],["(3) Wisconsin","(14) Quinnipiac"],
+      ["(7) Miami FL","(10) Missouri"],["(2) Purdue","(15) Queens"],
+    ]
+  },
+  south: {
+    name:"SOUTH",color:"#ff6f00",
+    r1:[
+      ["(1) Florida","(16) PV/Lehigh"],["(8) Clemson","(9) Iowa"],
+      ["(5) Vanderbilt","(12) McNeese State"],["(4) Nebraska","(13) Troy"],
+      ["(6) N. Carolina","(11) VCU"],["(3) Illinois","(14) Penn"],
+      ["(7) St. Mary's","(10) Texas A&M"],["(2) Houston","(15) SIU-E"],
+    ]
+  },
+  midwest: {
+    name:"MIDWEST",color:"#00e676",
+    r1:[
+      ["(1) Michigan","(16) UMBC/Howard"],["(8) Georgia","(9) Saint Louis"],
+      ["(5) Texas Tech","(12) Akron"],["(4) Alabama","(13) Hofstra"],
+      ["(6) Tennessee","(11) Miami OH/SMU"],["(3) Virginia","(14) Wright State"],
+      ["(7) Kentucky","(10) Santa Clara"],["(2) Iowa State","(15) Tenn. State"],
+    ]
+  },
+};
+
+function useBracketState() {
+  const [bracket, setBracket] = useState(() => {
+    try {
+      const saved = localStorage.getItem("cave_bracket_2026");
+      return saved ? JSON.parse(saved) : null;
+    } catch { return null; }
+  });
+
+  const saveBracket = (b) => {
+    setBracket(b);
+    try { localStorage.setItem("cave_bracket_2026", JSON.stringify(b)); } catch {}
+  };
+
+  // Build initial bracket state from template
+  const initBracket = () => {
+    const regions = {};
+    Object.entries(BRACKET_2026).forEach(([key, region]) => {
+      regions[key] = {
+        name: region.name,
+        color: region.color,
+        rounds: [
+          region.r1.map(([t1,t2]) => ({ team1:t1, team2:t2, winner:null, score1:null, score2:null, live:false })),
+          Array(4).fill(null).map(() => ({ team1:null, team2:null, winner:null, score1:null, score2:null, live:false })),
+          Array(2).fill(null).map(() => ({ team1:null, team2:null, winner:null, score1:null, score2:null, live:false })),
+          [{ team1:null, team2:null, winner:null }], // Elite Eight
+        ]
+      };
+    });
+    return { regions, finalFour: [null,null,null,null], champion:null };
+  };
+
+  const state = bracket || initBracket();
+
+  const advance = (regionKey, roundIdx, gameIdx, winner) => {
+    const next = JSON.parse(JSON.stringify(state));
+    // Set winner
+    next.regions[regionKey].rounds[roundIdx][gameIdx].winner = winner;
+    // Advance to next round
+    const nextRoundIdx = roundIdx + 1;
+    const nextGameIdx = Math.floor(gameIdx / 2);
+    const slot = gameIdx % 2 === 0 ? "team1" : "team2";
+    if (nextRoundIdx < 4) {
+      if (!next.regions[regionKey].rounds[nextRoundIdx][nextGameIdx]) {
+        next.regions[regionKey].rounds[nextRoundIdx][nextGameIdx] = { team1:null, team2:null, winner:null };
+      }
+      next.regions[regionKey].rounds[nextRoundIdx][nextGameIdx][slot] = winner;
+    }
+    saveBracket(next);
+    return winner;
+  };
+
+  const reset = () => { saveBracket(initBracket()); };
+
+  return { state, advance, reset };
+}
+
+function BracketGame({ game, onWin, color, compact=false }) {
+  const [animIn, setAnimIn] = useState(false);
+  useEffect(() => { if (game.winner) { setAnimIn(true); } }, [game.winner]);
+
+  const teamStyle = (team, isWinner) => ({
+    display:"flex", alignItems:"center", justifyContent:"space-between",
+    padding: compact ? "4px 7px" : "6px 10px",
+    background: isWinner ? `${color}22` : (game.winner && !isWinner ? "transparent" : "#0f0f1a"),
+    borderRadius:4, marginBottom:2, cursor: (!game.winner && team) ? "pointer" : "default",
+    opacity: game.winner && !isWinner ? 0.4 : 1,
+    border: isWinner ? `1px solid ${color}44` : "1px solid transparent",
+    transition:"all 0.3s",
+  });
+
+  const t1 = game.team1 || "TBD";
+  const t2 = game.team2 || "TBD";
+  const canClick = !game.winner && game.team1 && game.team2;
+
+  return (
+    <div style={{background:"#161624",border:"1px solid #252538",borderRadius:6,padding:compact?2:4,minWidth:compact?110:140,position:"relative",overflow:"hidden"}}>
+      {game.live && <div style={{position:"absolute",top:0,left:0,right:0,height:2,background:`linear-gradient(90deg,${color},transparent)`,animation:"pulse 1s infinite"}} />}
+      <div style={teamStyle(game.team1, game.winner===t1)} onClick={()=>canClick&&onWin&&onWin(t1)}>
+        <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:compact?"0.65rem":"0.75rem",letterSpacing:0.5,color:game.winner===t1?color:"#e8e8f0",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:compact?70:100}}>{t1}</span>
+        {game.score1!=null && <span style={{fontFamily:"'Source Code Pro',monospace",fontSize:"0.7rem",color:game.score1>game.score2?"#00e676":"#6a6a8a",marginLeft:4,flexShrink:0}}>{game.score1}</span>}
+      </div>
+      <div style={{height:1,background:"#252538",margin:"1px 0"}} />
+      <div style={teamStyle(game.team2, game.winner===t2)} onClick={()=>canClick&&onWin&&onWin(t2)}>
+        <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:compact?"0.65rem":"0.75rem",letterSpacing:0.5,color:game.winner===t2?color:"#e8e8f0",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:compact?70:100}}>{t2}</span>
+        {game.score2!=null && <span style={{fontFamily:"'Source Code Pro',monospace",fontSize:"0.7rem",color:game.score2>game.score1?"#00e676":"#6a6a8a",marginLeft:4,flexShrink:0}}>{game.score2}</span>}
+      </div>
+    </div>
+  );
+}
+
+function AdvancementPopup({ team, region, onDone }) {
+  useEffect(() => { const t = setTimeout(onDone, 4000); return () => clearTimeout(t); }, [onDone]);
+  return (
+    <div style={{position:"fixed",inset:0,zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",pointerEvents:"none"}}>
+      <div style={{background:"#0f0f1a",border:`2px solid ${region.color}`,borderRadius:16,padding:"30px 40px",textAlign:"center",boxShadow:`0 0 60px ${region.color}66`,animation:"popIn 0.4s ease-out"}}>
+        <style>{`@keyframes popIn{from{transform:scale(0.5);opacity:0;}to{transform:scale(1);opacity:1;}}`}</style>
+        <div style={{fontSize:"3rem",marginBottom:8}}>🏀</div>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"0.8rem",letterSpacing:3,color:region.color,marginBottom:4}}>{region.name} REGION</div>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"clamp(1.2rem,4vw,2rem)",letterSpacing:4,color:"#fff",marginBottom:8}}>{team}</div>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"1rem",letterSpacing:3,color:"#00e676"}}>ADVANCES! ✓</div>
+      </div>
+    </div>
+  );
+}
+
+function BracketRegion({ regionKey, region, onAdvance, compact=false }) {
+  const rounds = region.rounds;
+  const roundNames = ["R64","R32","S16","E8"];
+  const gap = compact ? 4 : 8;
+
+  return (
+    <div style={{display:"flex",gap:gap,alignItems:"flex-start"}}>
+      {rounds.map((round, ri) => (
+        <div key={ri} style={{display:"flex",flexDirection:"column",gap:0}}>
+          <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"0.62rem",letterSpacing:2,color:region.color,textAlign:"center",marginBottom:4,opacity:0.7}}>{roundNames[ri]}</div>
+          <div style={{display:"flex",flexDirection:"column",justifyContent:"space-around",height: compact ? (ri===0?320:ri===1?320:ri===2?320:320) : (ri===0?480:ri===1?480:ri===2?480:480) }}>
+            {round.map((game, gi) => game && (
+              <div key={gi} style={{display:"flex",alignItems:"center",marginBottom:ri===0?compact?2:4:0}}>
+                <BracketGame
+                  game={game}
+                  color={region.color}
+                  compact={compact}
+                  onWin={(winner) => onAdvance(regionKey, ri, gi, winner)}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function BracketPanel({ scores }) {
+  const { state, advance, reset } = useBracketState();
+  const [popup, setPopup] = useState(null); // {team, region}
+  const [viewRegion, setViewRegion] = useState("east");
+  const prevWinnersRef = useRef({});
+
+  // Auto-update bracket from ESPN live scores
+  useEffect(() => {
+    if (!scores.length) return;
+    scores.forEach(g => {
+      if (!g.isFinal) return;
+      const winner = g.homeScore > g.awayScore ? g.home : g.away;
+      const loser = g.homeScore > g.awayScore ? g.away : g.home;
+      // Try to match to a bracket game
+      Object.entries(state.regions).forEach(([rk, region]) => {
+        region.rounds.forEach((round, ri) => {
+          round.forEach((game, gi) => {
+            if (game.winner) return;
+            const t1 = (game.team1||"").toLowerCase().replace(/[^a-z]/g,"");
+            const t2 = (game.team2||"").toLowerCase().replace(/[^a-z]/g,"");
+            const w = winner.toLowerCase().replace(/[^a-z]/g,"");
+            const l = loser.toLowerCase().replace(/[^a-z]/g,"");
+            if ((t1.includes(w)||w.includes(t1.slice(0,4))) && (t2.includes(l)||l.includes(t2.slice(0,4)))) {
+              advance(rk, ri, gi, game.team1);
+            } else if ((t2.includes(w)||w.includes(t2.slice(0,4))) && (t1.includes(l)||l.includes(t1.slice(0,4)))) {
+              advance(rk, ri, gi, game.team2);
+            }
+          });
+        });
+      });
+    });
+  }, [scores]);
+
+  const handleAdvance = (regionKey, roundIdx, gameIdx, winner) => {
+    advance(regionKey, roundIdx, gameIdx, winner);
+    const region = state.regions[regionKey];
+    setPopup({ team: winner, region: { name: region.name, color: region.color } });
+  };
+
+  const regions = Object.entries(state.regions);
+  const currentRegion = state.regions[viewRegion];
+
+  return (
+    <div>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",letterSpacing:3,fontSize:"1.1rem",color:"#f5c842"}}>2026 LIVE BRACKET</div>
+        <div style={{display:"flex",gap:5,alignItems:"center"}}>
+          <span style={{fontSize:"0.65rem",color:"#6a6a8a"}}>Click a team to advance</span>
+          <button onClick={reset} style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"0.65rem",letterSpacing:1,padding:"3px 8px",background:"transparent",color:"#6a6a8a",border:"1px solid #252538",borderRadius:4,cursor:"pointer"}}>RESET</button>
+        </div>
+      </div>
+
+      {/* Region tabs */}
+      <div style={{display:"flex",gap:4,marginBottom:12,overflowX:"auto"}}>
+        {regions.map(([key,r]) => (
+          <button key={key} onClick={()=>setViewRegion(key)} style={{fontFamily:"'Bebas Neue',sans-serif",letterSpacing:2,fontSize:"0.72rem",padding:"5px 12px",background:viewRegion===key?r.color:"transparent",color:viewRegion===key?"#000":r.color,border:`1px solid ${r.color}`,borderRadius:5,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0,transition:"all 0.2s"}}>
+            {r.name}
+          </button>
+        ))}
+      </div>
+
+      {/* Region bracket — scrollable horizontally */}
+      <div style={{overflowX:"auto",overflowY:"hidden",paddingBottom:8}}>
+        <BracketRegion
+          regionKey={viewRegion}
+          region={currentRegion}
+          onAdvance={handleAdvance}
+          compact={false}
+        />
+      </div>
+
+      {/* Final Four summary */}
+      <div style={{marginTop:16,background:"#0f0f1a",border:"1px solid rgba(245,200,66,0.3)",borderRadius:8,padding:"10px 14px"}}>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",letterSpacing:3,fontSize:"0.85rem",color:"#f5c842",marginBottom:8}}>FINAL FOUR · INDIANAPOLIS</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+          {Object.entries(state.regions).map(([key,r]) => {
+            const eliteEight = r.rounds[3]?.[0];
+            const ff = eliteEight?.winner;
+            return (
+              <div key={key} style={{background:ff?"#161624":"#0a0a14",border:`1px solid ${ff?r.color:"#252538"}`,borderRadius:6,padding:"6px 10px",display:"flex",alignItems:"center",gap:6}}>
+                <div style={{width:6,height:6,borderRadius:"50%",background:r.color,flexShrink:0}} />
+                <div>
+                  <div style={{fontSize:"0.58rem",color:r.color,fontFamily:"'Bebas Neue',sans-serif",letterSpacing:1}}>{r.name}</div>
+                  <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"0.8rem",color:ff?"#fff":"#6a6a8a"}}>{ff||"TBD"}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Popup overlay */}
+      {popup && <AdvancementPopup team={popup.team} region={popup.region} onDone={()=>setPopup(null)} />}
+    </div>
+  );
+}
 
 // ============================================================
 // MAIN APP
@@ -1825,7 +2105,7 @@ export default function App() {
           <div style={{overflow:"hidden",flex:1}}>
             {isLive
               ? <div className="ticker">{games.length ? games.map(g=>`${g.team1} vs ${g.team2} | SPR: ${g.spread} | O/U: ${g.ou}`).join("   •   ") : "Loading live odds..."}</div>
-              : <div style={{padding:"0 16px",color:"#6a6a8a",fontFamily:"'Source Code Pro',monospace",fontSize:"0.75rem"}}>STREAM PAUSED — Toggle GO LIVE to activate</div>
+              : <div style={{padding:"0 16px",color:"#6a6a8a",fontFamily:"'Source Code Pro',monospace",fontSize:"0.75rem"}}>2026 NCAA TOURNAMENT • Thu 3/19: Duke vs Siena 2:50p • Ohio St vs TCU 12:15p • Nebraska vs Troy 12:40p • Louisville vs USF 1:30p • Vanderbilt vs McNeese 3:15p • MSU vs NDSU 4:05p • Marquette vs TX/NCST 6:10p • UNC vs VCU 6:50p • St Marys vs TAMU 7:35p • Illinois vs Penn 9:25p     Fri 3/20: Michigan vs UMBC/Howard • Florida vs PV/Lehigh • Arizona vs Winthrop • St Johns vs Northern Iowa • Kansas vs Cal Baptist • UConn vs Furman • Iowa State vs TN State • Clemson vs Iowa • UCLA vs UCF • Kentucky vs Santa Clara • Oregon vs Liberty • Baylor vs Vermont • Purdue vs Queens • Wisconsin vs Quinnipiac • Miami vs Missouri • Houston vs SIU</div>
             }
           </div>
         </div>
@@ -1849,8 +2129,8 @@ export default function App() {
             <div style={card}><PhotoStrip toast={showToast} /></div>
             <div style={card}>
               <div style={{display:"flex",gap:3,background:"#0f0f1a",padding:3,borderRadius:7,border:"1px solid #252538",marginBottom:12}}>
-                {["scores","boosts","slips","board","halftime"].map(t=>(
-                  <button key={t} onClick={()=>setTab(t)} style={{flex:1,padding:"6px 2px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:0,fontSize:"0.75rem",background:tab===t?"#161624":"transparent",border:"none",color:tab===t?"#f5c842":"#6a6a8a",cursor:"pointer",borderRadius:5}}>{{scores:"ODDS",boosts:"BOOSTS",slips:"SLIPS",board:"🏆 BOARD",halftime:"🎉 PARTY"}[t]||t.toUpperCase()}</button>
+                {["scores","bracket","boosts","slips","board","halftime"].map(t=>(
+                  <button key={t} onClick={()=>setTab(t)} style={{flex:1,padding:"6px 2px",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:0,fontSize:"0.75rem",background:tab===t?"#161624":"transparent",border:"none",color:tab===t?"#f5c842":"#6a6a8a",cursor:"pointer",borderRadius:5}}>{{scores:"ODDS",bracket:"🏀 BRACKET",boosts:"BOOSTS",slips:"SLIPS",board:"🏆 BOARD",halftime:"🎉 PARTY"}[t]||t.toUpperCase()}</button>
                 ))}
               </div>
 
@@ -1969,6 +2249,7 @@ export default function App() {
               )}
 
               {tab==="slips" && <SlipPanel toast={showToast} onWin={()=>setWinMsg("BET CASHED! 💰🎉")} />}
+              {tab==="bracket" && <BracketPanel scores={scores} />}
               {tab==="board" && <Leaderboard />}
               {tab==="halftime" && <HalftimePlayer toast={showToast} />}
             </div>
