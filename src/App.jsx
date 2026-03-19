@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { initializeApp } from "firebase/app";
-import { getDatabase, ref as dbRef, push, set, onValue, update, remove, runTransaction } from "firebase/database";
+import { getDatabase, ref as dbRef, push, set, onValue, update, remove } from "firebase/database";
 
 // ============================================================
 // FIREBASE CONFIG
@@ -99,7 +99,7 @@ async function callOracle(prompt) {
     method: "POST",
     headers: ANTHROPIC_HDR,
     body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-6",
       max_tokens: 1000,
       system: 'You are the Cave Oracle, a sharp funny sports betting analyst for a March Madness dadchelor party at Snyders Gambling Cave. Return ONLY valid JSON: {"picks":[{"pick":"Team or Bet name","reasoning":"Short punchy reason","value":"HIGH","confidence":75,"site":"DraftKings"}],"usage":{"input_tokens":500,"output_tokens":300}}',
       messages: [{ role: "user", content: prompt }],
@@ -918,7 +918,7 @@ async function readSlipWithAI(base64Image) {
     method: "POST",
     headers: ANTHROPIC_HDR,
     body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-6",
       max_tokens: 400,
       system: 'You are reading a sports betting slip image. Extract the bet details and return ONLY valid JSON with no extra text: {"pick":"team or bet description","odds":"e.g. -110 or +150","amount":"dollar amount wagered e.g. 25","payout":"potential payout e.g. 47.50","book":"sportsbook name"}. If you cannot read a field clearly use "?".',
       messages: [{
@@ -1801,26 +1801,26 @@ function useBracketState() {
     return () => unsub();
   }, []);
 
-  // advance uses a Firebase transaction so it always reads latest data
+  // advance: updates local stateRef immediately AND writes to Firebase
   const advance = useCallback((regionKey, roundIdx, gameIdx, winner) => {
-    runTransaction(dbRef(db, "bracket2026"), (current) => {
-      const data = current || initBracket();
-      const region = data.regions?.[regionKey];
-      if (!region) return current;
-      // Set winner
-      if (!region.rounds[roundIdx]?.[gameIdx]) return current;
-      region.rounds[roundIdx][gameIdx].winner = winner;
-      // Populate next round slot
-      const nextRound = roundIdx + 1;
-      if (nextRound < 4) {
-        const nextGame = Math.floor(gameIdx / 2);
-        const slot = gameIdx % 2 === 0 ? "team1" : "team2";
-        if (!region.rounds[nextRound]) region.rounds[nextRound] = [];
-        if (!region.rounds[nextRound][nextGame]) region.rounds[nextRound][nextGame] = { team1:null, team2:null, winner:null };
-        region.rounds[nextRound][nextGame][slot] = winner;
-      }
-      return data;
-    }).catch(e => console.error("Bracket transaction:", e));
+    // Work on a fresh deep copy from stateRef (always current)
+    const next = JSON.parse(JSON.stringify(stateRef.current));
+    const region = next.regions?.[regionKey];
+    if (!region?.rounds?.[roundIdx]?.[gameIdx]) return;
+    // Set winner
+    region.rounds[roundIdx][gameIdx].winner = winner;
+    // Populate next round slot
+    const nextRound = roundIdx + 1;
+    if (nextRound < 4) {
+      const nextGame = Math.floor(gameIdx / 2);
+      const slot = gameIdx % 2 === 0 ? "team1" : "team2";
+      if (!region.rounds[nextRound][nextGame]) region.rounds[nextRound][nextGame] = { team1:null, team2:null, winner:null };
+      region.rounds[nextRound][nextGame][slot] = winner;
+    }
+    // Update stateRef immediately so next processResult call sees fresh data
+    stateRef.current = next;
+    // Persist to Firebase (async, non-blocking)
+    set(dbRef(db, "bracket2026"), next).catch(e => console.error("Bracket save:", e));
   }, []);
 
   const reset = useCallback(() => {
