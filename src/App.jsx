@@ -1172,9 +1172,11 @@ function getVideoInfo(url) {
   // YouTube
   const ytPatterns = [/youtu\.be\/([^?&]+)/, /youtube\.com\/watch\?v=([^&]+)/, /youtube\.com\/embed\/([^?&]+)/, /youtube\.com\/shorts\/([^?&]+)/];
   for (const p of ytPatterns) { const m = url.match(p); if (m) return { type:"youtube", id:m[1] }; }
-  // Vimeo
-  const vmPatterns = [/vimeo\.com\/(\d+)/, /player\.vimeo\.com\/video\/(\d+)/];
-  for (const p of vmPatterns) { const m = url.match(p); if (m) return { type:"vimeo", id:m[1] }; }
+  // Vimeo — capture numeric ID plus optional private hash like /772cd2fa8c
+  const vmMatch = url.match(/vimeo\.com\/(?:video\/)?(\d+)(?:\/([a-f0-9]+))?/);
+  if (vmMatch) return { type:"vimeo", id:vmMatch[1], hash:vmMatch[2]||null };
+  const vmEmbed = url.match(/player\.vimeo\.com\/video\/(\d+)(?:\?h=([a-f0-9]+))?/);
+  if (vmEmbed) return { type:"vimeo", id:vmEmbed[1], hash:vmEmbed[2]||null };
   return null;
 }
 
@@ -1228,8 +1230,9 @@ function HalftimePlayer({ toast }) {
     return () => document.removeEventListener("fullscreenchange", fn);
   }, []);
 
+  const vimeoHash = videoInfo?.hash ? `&h=${videoInfo.hash}` : "";
   const embedUrl = videoType === "vimeo"
-    ? `https://player.vimeo.com/video/${videoId}?badge=0&autopause=0&player_id=0&app_id=58479`
+    ? `https://player.vimeo.com/video/${videoId}?badge=0&autopause=0&player_id=0&app_id=58479${vimeoHash}`
     : `https://www.youtube.com/embed/${videoId}?autoplay=0&rel=0&modestbranding=1`;
 
   return (
