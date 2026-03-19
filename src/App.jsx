@@ -22,7 +22,7 @@ const db = getDatabase(firebaseApp);
 // ============================================================
 const ODDS_API_KEY = "7fec6f19b1eb6838a13fa733bee6d610";
 const ODDS_API_BASE = "https://api.the-odds-api.com/v4";
-const ANTHROPIC_KEY = "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";
+const ANTHROPIC_KEY = import.meta.env.VITE_ANTHROPIC_KEY || "";
 const ANTHROPIC_HDR = {
   "Content-Type": "application/json",
   "x-api-key": ANTHROPIC_KEY,
@@ -822,7 +822,8 @@ function OraclePanel({ isLive, toast, games }) {
     } catch(e) {
       const msg = e.message || String(e);
       console.error("Oracle error:", e);
-      toast("Oracle failed: " + msg.slice(0,80));
+      if (!ANTHROPIC_KEY) toast("Oracle: Set VITE_ANTHROPIC_KEY in Vercel env vars");
+      else toast("Oracle failed: " + msg.slice(0,80));
     }
     setLoading(false);
   };
