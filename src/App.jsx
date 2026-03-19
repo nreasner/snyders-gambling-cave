@@ -1952,7 +1952,12 @@ const ESPN_ALIASES = {
 
 function normalizeTeam(name) {
   if (!name) return "";
-  const n = name.toLowerCase().replace(/[^a-z0-9&\s]/g,"").trim();
+  // Strip seed prefix like "(1) " → remove leading digits and spaces
+  let n = name.toLowerCase()
+    .replace(/^\(\d+\)\s*/, "")   // remove "(N) " prefix
+    .replace(/^\d+\s+/, "")         // remove "N " prefix (after parens stripped)
+    .replace(/[^a-z0-9&\s]/g, "")   // remove remaining punctuation
+    .trim();
   return ESPN_ALIASES[n] || n;
 }
 
@@ -1961,7 +1966,6 @@ function BracketPanel({ scores }) {
   const [popup, setPopup] = useState(null);
   const [viewRegion, setViewRegion] = useState("east");
   const processedGames = useRef(new Set());
-  const knownSeeded = useRef(false);
 
   // Core matching: uses stateRef.current so it always has fresh data
   const processResult = useCallback((winnerName, loserName, gameId=null) => {
@@ -1994,18 +1998,14 @@ function BracketPanel({ scores }) {
     return matched;
   }, [advance, stateRef]);
 
-  // Seed known results once after Firebase loads — only if bracket has no winners yet
+  // Always apply known results after Firebase loads
+  // processResult skips games that already have a winner, so this is safe
   useEffect(() => {
-    if (!loaded || knownSeeded.current) return;
-    const hasAnyWinner = Object.values(state.regions || {}).some(r =>
-      r.rounds[0].some(g => g.winner)
-    );
-    if (hasAnyWinner) { knownSeeded.current = true; return; } // Firebase already has data
-    knownSeeded.current = true;
+    if (!loaded) return;
     KNOWN_RESULTS_2026.forEach(r => {
       processResult(normalizeTeam(r.winner), normalizeTeam(r.loser));
     });
-  }, [loaded, state]);
+  }, [loaded]);
 
   // Auto-update from ESPN live feed
   useEffect(() => {
