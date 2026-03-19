@@ -106,6 +106,7 @@ async function callOracle(prompt) {
     }),
   });
   const data = await res.json();
+  console.log("Oracle API response:", JSON.stringify(data).slice(0,300));
   if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
   // Track real token usage from API response
   const inputTok = data.usage?.input_tokens || 600;
@@ -820,10 +821,8 @@ function OraclePanel({ isLive, toast, games }) {
       toast("Oracle has spoken! 🔮");
     } catch(e) {
       const msg = e.message || String(e);
-      if (msg.includes("401") || msg.includes("auth")) toast("Oracle: API key invalid — check ANTHROPIC_KEY in code");
-      else if (msg.includes("fetch")) toast("Oracle: network error — check connection");
-      else toast("Oracle failed: " + msg.slice(0,60));
       console.error("Oracle error:", e);
+      toast("Oracle failed: " + msg.slice(0,80));
     }
     setLoading(false);
   };
