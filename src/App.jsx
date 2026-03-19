@@ -549,8 +549,13 @@ function useESPNScores(isLive) {
 
   const fetchScores = useCallback(async (onPurdueLost) => {
     try {
+      // Fetch today AND yesterday to catch games that finished after midnight
+      const today = new Date();
+      const yesterday = new Date(today); yesterday.setDate(today.getDate()-1);
+      const fmt = d => d.toISOString().slice(0,10).replace(/-/g,"");
+      const dateRange = `${fmt(yesterday)}-${fmt(today)}`;
       const res = await fetch(
-        "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard"
+        `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?limit=200&groups=50&dates=${dateRange}`
       );
       if (!res.ok) throw new Error(`ESPN ${res.status}`);
       const data = await res.json();
@@ -1727,36 +1732,40 @@ function MobileUpload() { return <MobileApp />; }
 const BRACKET_2026 = {
   east: {
     name:"EAST",color:"#2979ff",
+    // Greenville + Philadelphia pods
     r1:[
-      ["(1) Duke","(16) Siena"],["(8) Ohio State","(9) TCU"],
-      ["(5) St. John's","(12) Northern Iowa"],["(4) Kansas","(13) Cal Baptist"],
-      ["(6) Louisville","(11) USF"],["(3) Michigan State","(14) N. Dakota St."],
-      ["(7) UCLA","(10) UCF"],["(2) UConn","(15) Furman"],
+      ["(1) Duke","(16) Siena"],         ["(8) Ohio State","(9) TCU"],
+      ["(5) St. John's","(12) N. Iowa"], ["(4) Kansas","(13) Cal Baptist"],
+      ["(6) Louisville","(11) USF"],     ["(3) Michigan State","(14) N. Dakota St."],
+      ["(7) UCLA","(10) UCF"],           ["(2) UConn","(15) Furman"],
     ]
   },
   west: {
     name:"WEST",color:"#d500f9",
+    // San Diego + Buffalo pods
     r1:[
-      ["(1) Arizona","(16) Winthrop"],["(8) Miss. State","(9) Wake Forest"],
-      ["(5) Oregon","(12) Liberty"],["(4) Baylor","(13) Vermont"],
-      ["(6) Marquette","(11) TX/NC State"],["(3) Wisconsin","(14) Quinnipiac"],
-      ["(7) Miami FL","(10) Missouri"],["(2) Purdue","(15) Queens"],
+      ["(1) Arizona","(16) LIU"],        ["(8) Villanova","(9) Utah State"],
+      ["(5) Wisconsin","(12) High Point"],["(4) Arkansas","(13) Hawaii"],
+      ["(6) BYU","(11) TX/NC State"],    ["(3) Gonzaga","(14) Kennesaw St."],
+      ["(7) Miami FL","(10) Missouri"],  ["(2) Purdue","(15) Queens"],
     ]
   },
   south: {
     name:"SOUTH",color:"#ff6f00",
+    // Tampa + Oklahoma City pods
     r1:[
-      ["(1) Florida","(16) PV/Lehigh"],["(8) Clemson","(9) Iowa"],
-      ["(5) Vanderbilt","(12) McNeese State"],["(4) Nebraska","(13) Troy"],
-      ["(6) N. Carolina","(11) VCU"],["(3) Illinois","(14) Penn"],
-      ["(7) St. Mary's","(10) Texas A&M"],["(2) Houston","(15) SIU-E"],
+      ["(1) Florida","(16) PV/Lehigh"],  ["(8) Clemson","(9) Iowa"],
+      ["(5) Vanderbilt","(12) McNeese"], ["(4) Nebraska","(13) Troy"],
+      ["(6) N. Carolina","(11) VCU"],    ["(3) Illinois","(14) Penn"],
+      ["(7) St. Mary's","(10) Texas A&M"],["(2) Houston","(15) Idaho"],
     ]
   },
   midwest: {
     name:"MIDWEST",color:"#00e676",
+    // St. Louis + Lexington pods
     r1:[
       ["(1) Michigan","(16) UMBC/Howard"],["(8) Georgia","(9) Saint Louis"],
-      ["(5) Texas Tech","(12) Akron"],["(4) Alabama","(13) Hofstra"],
+      ["(5) Texas Tech","(12) Akron"],   ["(4) Alabama","(13) Hofstra"],
       ["(6) Tennessee","(11) Miami OH/SMU"],["(3) Virginia","(14) Wright State"],
       ["(7) Kentucky","(10) Santa Clara"],["(2) Iowa State","(15) Tenn. State"],
     ]
@@ -1899,6 +1908,19 @@ function BracketRegion({ regionKey, region, compact=false }) {
   );
 }
 
+// Known 2026 NCAA tournament results — seeded so bracket shows even before GO LIVE
+// Updated manually as games complete
+const KNOWN_RESULTS_2026 = [
+  // Thursday March 19 — Round of 64 (CONFIRMED FINALS)
+  { winner:"TCU",        loser:"Ohio State"  },  // TCU 66-64
+  { winner:"Nebraska",   loser:"Troy"        },  // Nebraska 76-47 🎉 first NCAA win ever
+  { winner:"Louisville", loser:"USF"         },  // Louisville 83-79
+  { winner:"High Point", loser:"Wisconsin"   },  // HIGH POINT UPSET 83-82 🚨
+  { winner:"Duke",       loser:"Siena"       },  // Duke survived 71-65
+  // Friday March 20 — add results as they come in:
+  // { winner:"WINNER_TEAM", loser:"LOSER_TEAM" },
+];
+
 // ESPN short name → bracket team name aliases
 const ESPN_ALIASES = {
   "duke":"duke","ohio st":"ohio state","ohio state":"ohio state","tcu":"tcu",
@@ -1923,6 +1945,16 @@ const ESPN_ALIASES = {
   "tennessee":"tennessee","miami (oh)":"miami oh/smu","wright st":"wright state","wright state":"wright state",
   "kentucky":"kentucky","santa clara":"santa clara","iowa state":"iowa state","tennessee state":"tenn. state","tenn. state":"tenn. state",
   "siena":"siena",
+  "gonzaga":"gonzaga","byu":"byu","brigham young":"byu",
+  "villanova":"villanova","nova":"villanova",
+  "utah state":"utah state","utah st":"utah state",
+  "arkansas":"arkansas","razorbacks":"arkansas",
+  "hawaii":"hawaii","hawai'i":"hawaii",
+  "liu":"liu","long island":"liu","long island university":"liu",
+  "kennesaw":"kennesaw st.","kennesaw state":"kennesaw st.",
+  "high point":"high point","hp":"high point",
+  "idaho":"idaho","vandals":"idaho",
+  "northern iowa":"n. iowa","n. iowa":"n. iowa",
 };
 
 function normalizeTeam(name) {
@@ -1937,6 +1969,42 @@ function BracketPanel({ scores }) {
   const [viewRegion, setViewRegion] = useState("east");
   const processedGames = useRef(new Set()); // track ESPN game IDs already processed
 
+  // Process a winner/loser pair into the bracket
+  const processResult = useCallback((espnWinner, espnLoser, gameId=null) => {
+    if (gameId && processedGames.current.has(gameId)) return;
+    let matched = false;
+    Object.entries(state.regions).forEach(([rk, region]) => {
+      if (matched) return;
+      region.rounds.forEach((round, ri) => {
+        if (matched) return;
+        round.forEach((game, gi) => {
+          if (matched || game.winner) return;
+          const bt1 = normalizeTeam(game.team1);
+          const bt2 = normalizeTeam(game.team2);
+          if (!bt1 || !bt2 || bt1==="tbd" || bt2==="tbd") return;
+          const t1wins = bt1===espnWinner && bt2===espnLoser;
+          const t2wins = bt2===espnWinner && bt1===espnLoser;
+          if (t1wins || t2wins) {
+            matched = true;
+            if (gameId) processedGames.current.add(gameId);
+            const winner = t1wins ? game.team1 : game.team2;
+            advance(rk, ri, gi, winner);
+            const region = state.regions[rk];
+            setPopup({ team: winner, region: { name: region.name, color: region.color } });
+          }
+        });
+      });
+    });
+  }, [state, advance]);
+
+  // Seed bracket with known hardcoded results on load
+  useEffect(() => {
+    if (!loaded) return;
+    KNOWN_RESULTS_2026.forEach(r => {
+      processResult(normalizeTeam(r.winner), normalizeTeam(r.loser));
+    });
+  }, [loaded]);
+
   // Auto-update bracket from ESPN final scores
   useEffect(() => {
     if (!scores.length || !loaded) return;
@@ -1945,29 +2013,7 @@ function BracketPanel({ scores }) {
       if (processedGames.current.has(g.id)) return; // already handled
       const espnWinner = normalizeTeam(g.homeScore >= g.awayScore ? g.home : g.away);
       const espnLoser  = normalizeTeam(g.homeScore >= g.awayScore ? g.away : g.home);
-      let matched = false;
-      Object.entries(state.regions).forEach(([rk, region]) => {
-        if (matched) return;
-        region.rounds.forEach((round, ri) => {
-          if (matched) return;
-          round.forEach((game, gi) => {
-            if (matched || game.winner) return;
-            const bt1 = normalizeTeam(game.team1);
-            const bt2 = normalizeTeam(game.team2);
-            if (!bt1 || !bt2 || bt1 === "tbd" || bt2 === "tbd") return;
-            const t1wins = bt1 === espnWinner && bt2 === espnLoser;
-            const t2wins = bt2 === espnWinner && bt1 === espnLoser;
-            if (t1wins || t2wins) {
-              matched = true;
-              processedGames.current.add(g.id);
-              const winner = t1wins ? game.team1 : game.team2;
-              advance(rk, ri, gi, winner);
-              const region = state.regions[rk];
-              setPopup({ team: winner, region: { name: region.name, color: region.color } });
-            }
-          });
-        });
-      });
+      processResult(espnWinner, espnLoser, g.id);
     });
   }, [scores, loaded]);
 
