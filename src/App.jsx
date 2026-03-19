@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { initializeApp } from "firebase/app";
-import { getDatabase, ref as dbRef, push, set, onValue, update, remove } from "firebase/database";
+import { getDatabase, ref as dbRef, push, set, onValue, update, remove, runTransaction } from "firebase/database";
 
 // ============================================================
 // FIREBASE CONFIG
@@ -549,13 +549,11 @@ function useESPNScores(isLive) {
 
   const fetchScores = useCallback(async (onPurdueLost) => {
     try {
-      // Fetch today AND yesterday to catch games that finished after midnight
+      // Fetch today's games (groups=100 catches all tournament games)
       const today = new Date();
-      const yesterday = new Date(today); yesterday.setDate(today.getDate()-1);
-      const fmt = d => d.toISOString().slice(0,10).replace(/-/g,"");
-      const dateRange = `${fmt(yesterday)}-${fmt(today)}`;
+      const fmt = d => `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}${String(d.getDate()).padStart(2,"0")}`;
       const res = await fetch(
-        `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?limit=200&groups=50&dates=${dateRange}`
+        `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates=${fmt(today)}&groups=100&limit=200`
       );
       if (!res.ok) throw new Error(`ESPN ${res.status}`);
       const data = await res.json();
@@ -1167,25 +1165,20 @@ function Leaderboard() {
 }
 
 // ============================================================
-// HALFTIME ENTERTAINMENT — video player with fullscreen
+// HALFTIME ENTERTAINMENT — YouTube + Vimeo player with fullscreen
 // ============================================================
-// Extract YouTube video ID from any YouTube URL format
-function getYouTubeId(url) {
-  const patterns = [
-    /youtu\.be\/([^?&]+)/,
-    /youtube\.com\/watch\?v=([^&]+)/,
-    /youtube\.com\/embed\/([^?&]+)/,
-    /youtube\.com\/shorts\/([^?&]+)/,
-  ];
-  for (const p of patterns) {
-    const m = url.match(p);
-    if (m) return m[1];
-  }
+function getVideoInfo(url) {
+  if (!url) return null;
+  // YouTube
+  const ytPatterns = [/youtu\.be\/([^?&]+)/, /youtube\.com\/watch\?v=([^&]+)/, /youtube\.com\/embed\/([^?&]+)/, /youtube\.com\/shorts\/([^?&]+)/];
+  for (const p of ytPatterns) { const m = url.match(p); if (m) return { type:"youtube", id:m[1] }; }
+  // Vimeo
+  const vmPatterns = [/vimeo\.com\/(\d+)/, /player\.vimeo\.com\/video\/(\d+)/];
+  for (const p of vmPatterns) { const m = url.match(p); if (m) return { type:"vimeo", id:m[1] }; }
   return null;
 }
 
-// PLACEHOLDER YouTube ID — replace with real video when ready
-const PLACEHOLDER_YT_ID = "dQw4w9WgXcQ"; // classic placeholder
+const PLACEHOLDER_YT_ID = "dQw4w9WgXcQ";
 
 function HalftimePlayer({ toast }) {
   const [ytUrl, setYtUrl] = useState("");
@@ -1204,23 +1197,20 @@ function HalftimePlayer({ toast }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const containerRef = useRef();
 
-  const videoId = getYouTubeId(ytUrl) || PLACEHOLDER_YT_ID;
-  const isPlaceholder = !getYouTubeId(ytUrl);
+  const videoInfo = getVideoInfo(ytUrl);
+  const isPlaceholder = !videoInfo;
+  const videoId = videoInfo?.id || PLACEHOLDER_YT_ID;
+  const videoType = videoInfo?.type || "youtube";
 
   const saveUrl = () => {
-    const id = getYouTubeId(inputVal);
     if (!inputVal.trim()) {
-      // clear back to placeholder
-      setYtUrl("");
-      setEditing(false);
-      set(dbRef(db,"ytUrl"),"");
-      return;
+      setYtUrl(""); setEditing(false); set(dbRef(db,"ytUrl"),""); return;
     }
-    if (!id) { toast("Invalid YouTube URL — paste the full link"); return; }
-    setYtUrl(inputVal);
-    setEditing(false);
+    const info = getVideoInfo(inputVal);
+    if (!info) { toast("Invalid URL — paste a YouTube or Vimeo link"); return; }
+    setYtUrl(inputVal); setEditing(false);
     set(dbRef(db,"ytUrl"), inputVal);
-    toast("Power Hour loaded! 🎉");
+    toast(`${info.type === "vimeo" ? "Vimeo" : "YouTube"} video loaded! 🎉`);
   };
 
   const toggleFullscreen = () => {
@@ -1238,22 +1228,25 @@ function HalftimePlayer({ toast }) {
     return () => document.removeEventListener("fullscreenchange", fn);
   }, []);
 
-  const embedUrl = `https://www.youtube.com/embed/${videoId}?autoplay=0&rel=0&modestbranding=1`;
+  const embedUrl = videoType === "vimeo"
+    ? `https://player.vimeo.com/video/${videoId}?badge=0&autopause=0&player_id=0&app_id=58479`
+    : `https://www.youtube.com/embed/${videoId}?autoplay=0&rel=0&modestbranding=1`;
 
   return (
     <div>
-      <div style={{fontFamily:"'Bebas Neue',sans-serif",letterSpacing:3,fontSize:"1.1rem",color:"#f5c842",borderBottom:"1px solid #252538",paddingBottom:8,marginBottom:12}}>
-        🎉 HALFTIME ENTERTAINMENT
+      <div style={{fontFamily:"'Bebas Neue',sans-serif",letterSpacing:3,fontSize:"1.1rem",color:"#f5c842",borderBottom:"1px solid #252538",paddingBottom:8,marginBottom:12,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <span>🎉 HALFTIME ENTERTAINMENT</span>
+        {!isPlaceholder && <span style={{fontSize:"0.65rem",color:videoType==="vimeo"?"#00b3ff":"#ff1744",fontFamily:"Oswald,sans-serif",letterSpacing:1,background:videoType==="vimeo"?"rgba(0,179,255,0.1)":"rgba(255,23,68,0.1)",padding:"2px 8px",borderRadius:10}}>{videoType==="vimeo"?"VIMEO":"YOUTUBE"}</span>}
       </div>
 
       {/* PLACEHOLDER BANNER */}
       {isPlaceholder && (
         <div style={{background:"rgba(245,200,66,0.08)",border:"1px solid rgba(245,200,66,0.3)",borderRadius:6,padding:"8px 12px",marginBottom:10,fontSize:"0.75rem",color:"#f5c842",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:1}}>
-          ⚠ PLACEHOLDER VIDEO — Paste your Power Hour YouTube link below when ready
+          ⚠ Paste a YouTube or Vimeo link below
         </div>
       )}
 
-      {/* YOUTUBE EMBED */}
+      {/* VIDEO EMBED */}
       <div ref={containerRef} style={{position:"relative",background:"#000",borderRadius:8,overflow:"hidden",border:"1px solid #252538",marginBottom:10}}>
         <div style={{position:"relative",paddingBottom:"56.25%",height:0}}>
           <iframe
@@ -1278,7 +1271,7 @@ function HalftimePlayer({ toast }) {
             value={inputVal}
             onChange={e=>setInputVal(e.target.value)}
             onKeyDown={e=>e.key==="Enter"&&saveUrl()}
-            placeholder="Paste YouTube URL here..."
+            placeholder="Paste YouTube or Vimeo URL..."
             autoFocus
             style={{flex:1,background:"#0f0f1a",border:"1px solid #f5c842",borderRadius:4,padding:"7px 10px",color:"#e8e8f0",fontFamily:"Oswald,sans-serif",fontSize:"0.85rem"}}
           />
@@ -1772,67 +1765,67 @@ const BRACKET_2026 = {
   },
 };
 
-function useBracketState() {
-  const [bracket, setBracket] = useState(null);
-  const [loaded, setLoaded] = useState(false);
+function initBracket() {
+  const regions = {};
+  Object.entries(BRACKET_2026).forEach(([key, region]) => {
+    regions[key] = {
+      name: region.name, color: region.color,
+      rounds: [
+        region.r1.map(([t1,t2]) => ({ team1:t1, team2:t2, winner:null })),
+        Array(4).fill(null).map(() => ({ team1:null, team2:null, winner:null })),
+        Array(2).fill(null).map(() => ({ team1:null, team2:null, winner:null })),
+        [{ team1:null, team2:null, winner:null }],
+      ]
+    };
+  });
+  return { regions };
+}
 
-  // Subscribe from Firebase
+function useBracketState() {
+  const [state, setState] = useState(initBracket);
+  const [loaded, setLoaded] = useState(false);
+  const stateRef = useRef(state); // always-fresh ref for callbacks
+
   useEffect(() => {
     const r = dbRef(db, "bracket2026");
     const unsub = onValue(r, snap => {
       const val = snap.val();
-      setBracket(val || null);
+      const s = val || initBracket();
+      stateRef.current = s;
+      setState(s);
       setLoaded(true);
     });
     return () => unsub();
   }, []);
 
-  const saveBracket = (b) => {
-    setBracket(b);
-    set(dbRef(db, "bracket2026"), b).catch(e => console.error("Bracket save:", e));
-  };
-
-  // Build initial bracket state from template
-  const initBracket = () => {
-    const regions = {};
-    Object.entries(BRACKET_2026).forEach(([key, region]) => {
-      regions[key] = {
-        name: region.name,
-        color: region.color,
-        rounds: [
-          region.r1.map(([t1,t2]) => ({ team1:t1, team2:t2, winner:null, score1:null, score2:null, live:false })),
-          Array(4).fill(null).map(() => ({ team1:null, team2:null, winner:null, score1:null, score2:null, live:false })),
-          Array(2).fill(null).map(() => ({ team1:null, team2:null, winner:null, score1:null, score2:null, live:false })),
-          [{ team1:null, team2:null, winner:null }], // Elite Eight
-        ]
-      };
-    });
-    return { regions, finalFour: [null,null,null,null], champion:null };
-  };
-
-  const state = (loaded && bracket) ? bracket : initBracket();
-
-  const advance = (regionKey, roundIdx, gameIdx, winner) => {
-    const next = JSON.parse(JSON.stringify(state));
-    // Set winner
-    next.regions[regionKey].rounds[roundIdx][gameIdx].winner = winner;
-    // Advance to next round
-    const nextRoundIdx = roundIdx + 1;
-    const nextGameIdx = Math.floor(gameIdx / 2);
-    const slot = gameIdx % 2 === 0 ? "team1" : "team2";
-    if (nextRoundIdx < 4) {
-      if (!next.regions[regionKey].rounds[nextRoundIdx][nextGameIdx]) {
-        next.regions[regionKey].rounds[nextRoundIdx][nextGameIdx] = { team1:null, team2:null, winner:null };
+  // advance uses a Firebase transaction so it always reads latest data
+  const advance = useCallback((regionKey, roundIdx, gameIdx, winner) => {
+    runTransaction(dbRef(db, "bracket2026"), (current) => {
+      const data = current || initBracket();
+      const region = data.regions?.[regionKey];
+      if (!region) return current;
+      // Set winner
+      if (!region.rounds[roundIdx]?.[gameIdx]) return current;
+      region.rounds[roundIdx][gameIdx].winner = winner;
+      // Populate next round slot
+      const nextRound = roundIdx + 1;
+      if (nextRound < 4) {
+        const nextGame = Math.floor(gameIdx / 2);
+        const slot = gameIdx % 2 === 0 ? "team1" : "team2";
+        if (!region.rounds[nextRound]) region.rounds[nextRound] = [];
+        if (!region.rounds[nextRound][nextGame]) region.rounds[nextRound][nextGame] = { team1:null, team2:null, winner:null };
+        region.rounds[nextRound][nextGame][slot] = winner;
       }
-      next.regions[regionKey].rounds[nextRoundIdx][nextGameIdx][slot] = winner;
-    }
-    saveBracket(next);
-    return winner;
-  };
+      return data;
+    }).catch(e => console.error("Bracket transaction:", e));
+  }, []);
 
-  const reset = () => { saveBracket(initBracket()); };
+  const reset = useCallback(() => {
+    const fresh = initBracket();
+    set(dbRef(db, "bracket2026"), fresh);
+  }, []);
 
-  return { state, advance, reset, loaded };
+  return { state, stateRef, advance, reset, loaded };
 }
 
 function BracketGame({ game, color, compact=false }) {
@@ -1964,58 +1957,67 @@ function normalizeTeam(name) {
 }
 
 function BracketPanel({ scores }) {
-  const { state, advance, reset, loaded } = useBracketState();
+  const { state, stateRef, advance, reset, loaded } = useBracketState();
   const [popup, setPopup] = useState(null);
   const [viewRegion, setViewRegion] = useState("east");
-  const processedGames = useRef(new Set()); // track ESPN game IDs already processed
+  const processedGames = useRef(new Set());
+  const knownSeeded = useRef(false);
 
-  // Process a winner/loser pair into the bracket
-  const processResult = useCallback((espnWinner, espnLoser, gameId=null) => {
-    if (gameId && processedGames.current.has(gameId)) return;
+  // Core matching: uses stateRef.current so it always has fresh data
+  const processResult = useCallback((winnerName, loserName, gameId=null) => {
+    if (gameId && processedGames.current.has(gameId)) return false;
+    const currentState = stateRef.current;
+    if (!currentState?.regions) return false;
     let matched = false;
-    Object.entries(state.regions).forEach(([rk, region]) => {
-      if (matched) return;
-      region.rounds.forEach((round, ri) => {
-        if (matched) return;
-        round.forEach((game, gi) => {
-          if (matched || game.winner) return;
+    outer: for (const [rk, region] of Object.entries(currentState.regions)) {
+      for (let ri = 0; ri < region.rounds.length; ri++) {
+        const round = region.rounds[ri];
+        for (let gi = 0; gi < round.length; gi++) {
+          const game = round[gi];
+          if (!game || game.winner) continue;
           const bt1 = normalizeTeam(game.team1);
           const bt2 = normalizeTeam(game.team2);
-          if (!bt1 || !bt2 || bt1==="tbd" || bt2==="tbd") return;
-          const t1wins = bt1===espnWinner && bt2===espnLoser;
-          const t2wins = bt2===espnWinner && bt1===espnLoser;
+          if (!bt1 || !bt2) continue;
+          const t1wins = bt1 === winnerName && bt2 === loserName;
+          const t2wins = bt2 === winnerName && bt1 === loserName;
           if (t1wins || t2wins) {
             matched = true;
             if (gameId) processedGames.current.add(gameId);
             const winner = t1wins ? game.team1 : game.team2;
             advance(rk, ri, gi, winner);
-            const region = state.regions[rk];
             setPopup({ team: winner, region: { name: region.name, color: region.color } });
+            break outer;
           }
-        });
-      });
-    });
-  }, [state, advance]);
+        }
+      }
+    }
+    return matched;
+  }, [advance, stateRef]);
 
-  // Seed bracket with known hardcoded results on load
+  // Seed known results once after Firebase loads — only if bracket has no winners yet
   useEffect(() => {
-    if (!loaded) return;
+    if (!loaded || knownSeeded.current) return;
+    const hasAnyWinner = Object.values(state.regions || {}).some(r =>
+      r.rounds[0].some(g => g.winner)
+    );
+    if (hasAnyWinner) { knownSeeded.current = true; return; } // Firebase already has data
+    knownSeeded.current = true;
     KNOWN_RESULTS_2026.forEach(r => {
       processResult(normalizeTeam(r.winner), normalizeTeam(r.loser));
     });
-  }, [loaded]);
+  }, [loaded, state]);
 
-  // Auto-update bracket from ESPN final scores
+  // Auto-update from ESPN live feed
   useEffect(() => {
     if (!scores.length || !loaded) return;
     scores.forEach(g => {
       if (!g.isFinal) return;
-      if (processedGames.current.has(g.id)) return; // already handled
-      const espnWinner = normalizeTeam(g.homeScore >= g.awayScore ? g.home : g.away);
-      const espnLoser  = normalizeTeam(g.homeScore >= g.awayScore ? g.away : g.home);
-      processResult(espnWinner, espnLoser, g.id);
+      if (processedGames.current.has(g.id)) return;
+      const w = normalizeTeam(g.homeScore >= g.awayScore ? g.home : g.away);
+      const l = normalizeTeam(g.homeScore >= g.awayScore ? g.away : g.home);
+      processResult(w, l, g.id);
     });
-  }, [scores, loaded]);
+  }, [scores, loaded, processResult]);
 
   const regions = Object.entries(state.regions);
   const currentRegion = state.regions[viewRegion];
