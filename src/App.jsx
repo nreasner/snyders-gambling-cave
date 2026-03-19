@@ -1784,289 +1784,267 @@ function initBracket() {
   return { regions };
 }
 
-function useBracketState() {
-  const [state, setState] = useState(initBracket);
-  const [loaded, setLoaded] = useState(false);
-  const stateRef = useRef(state); // always-fresh ref for callbacks
 
-  useEffect(() => {
-    const r = dbRef(db, "bracket2026");
-    const unsub = onValue(r, snap => {
-      const val = snap.val();
-      const s = val || initBracket();
-      stateRef.current = s;
-      setState(s);
-      setLoaded(true);
-    });
-    return () => unsub();
-  }, []);
-
-  // advance: updates local stateRef immediately AND writes to Firebase
-  const advance = useCallback((regionKey, roundIdx, gameIdx, winner) => {
-    // Work on a fresh deep copy from stateRef (always current)
-    const next = JSON.parse(JSON.stringify(stateRef.current));
-    const region = next.regions?.[regionKey];
-    if (!region?.rounds?.[roundIdx]?.[gameIdx]) return;
-    // Set winner
-    region.rounds[roundIdx][gameIdx].winner = winner;
-    // Populate next round slot
-    const nextRound = roundIdx + 1;
-    if (nextRound < 4) {
-      const nextGame = Math.floor(gameIdx / 2);
-      const slot = gameIdx % 2 === 0 ? "team1" : "team2";
-      if (!region.rounds[nextRound][nextGame]) region.rounds[nextRound][nextGame] = { team1:null, team2:null, winner:null };
-      region.rounds[nextRound][nextGame][slot] = winner;
-    }
-    // Update stateRef immediately so next processResult call sees fresh data
-    stateRef.current = next;
-    // Persist to Firebase (async, non-blocking)
-    set(dbRef(db, "bracket2026"), next).catch(e => console.error("Bracket save:", e));
-  }, []);
-
-  const reset = useCallback(() => {
-    const fresh = initBracket();
-    set(dbRef(db, "bracket2026"), fresh);
-  }, []);
-
-  return { state, stateRef, advance, reset, loaded };
-}
-
-function BracketGame({ game, color, compact=false }) {
-  const teamStyle = (isWinner) => ({
-    display:"flex", alignItems:"center", justifyContent:"space-between",
-    padding: compact ? "4px 7px" : "6px 10px",
-    background: isWinner ? `${color}22` : (game.winner && !isWinner ? "transparent" : "#0f0f1a"),
-    borderRadius:4, marginBottom:2, cursor:"default",
-    opacity: game.winner && !isWinner ? 0.35 : 1,
-    border: isWinner ? `1px solid ${color}55` : "1px solid transparent",
-    transition:"all 0.5s",
-  });
-
-  const t1 = game.team1 || "TBD";
-  const t2 = game.team2 || "TBD";
-
-  return (
-    <div style={{background:"#161624",border:`1px solid ${game.winner?"#252538":"#1e1e30"}`,borderRadius:6,padding:compact?2:4,minWidth:compact?110:145,position:"relative",overflow:"hidden"}}>
-      {game.live && <div style={{position:"absolute",top:0,left:0,right:0,height:2,background:`linear-gradient(90deg,${color},${color}44,transparent)`,animation:"pulse 1s infinite"}} />}
-      <div style={teamStyle(game.winner===t1)}>
-        <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:compact?"0.65rem":"0.75rem",letterSpacing:0.5,color:game.winner===t1?color:"#e8e8f0",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:compact?72:105}}>{t1}</span>
-        {game.score1!=null && <span style={{fontFamily:"'Source Code Pro',monospace",fontSize:"0.7rem",color:game.score1>game.score2?"#00e676":"#6a6a8a",marginLeft:4,flexShrink:0,fontWeight:700}}>{game.score1}</span>}
-      </div>
-      <div style={{height:1,background:"#252538",margin:"1px 0"}} />
-      <div style={teamStyle(game.winner===t2)}>
-        <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:compact?"0.65rem":"0.75rem",letterSpacing:0.5,color:game.winner===t2?color:"#e8e8f0",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:compact?72:105}}>{t2}</span>
-        {game.score2!=null && <span style={{fontFamily:"'Source Code Pro',monospace",fontSize:"0.7rem",color:game.score2>game.score1?"#00e676":"#6a6a8a",marginLeft:4,flexShrink:0,fontWeight:700}}>{game.score2}</span>}
-      </div>
-    </div>
-  );
-}
-
-function AdvancementPopup({ team, region, onDone }) {
-  useEffect(() => { const t = setTimeout(onDone, 4000); return () => clearTimeout(t); }, [onDone]);
-  return (
-    <div style={{position:"fixed",inset:0,zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",pointerEvents:"none"}}>
-      <div style={{background:"#0f0f1a",border:`2px solid ${region.color}`,borderRadius:16,padding:"30px 40px",textAlign:"center",boxShadow:`0 0 60px ${region.color}66`,animation:"popIn 0.4s ease-out"}}>
-        <style>{`@keyframes popIn{from{transform:scale(0.5);opacity:0;}to{transform:scale(1);opacity:1;}}`}</style>
-        <div style={{fontSize:"3rem",marginBottom:8}}>🏀</div>
-        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"0.8rem",letterSpacing:3,color:region.color,marginBottom:4}}>{region.name} REGION</div>
-        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"clamp(1.2rem,4vw,2rem)",letterSpacing:4,color:"#fff",marginBottom:8}}>{team}</div>
-        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"1rem",letterSpacing:3,color:"#00e676"}}>ADVANCES! ✓</div>
-      </div>
-    </div>
-  );
-}
-
-function BracketRegion({ regionKey, region, compact=false }) {
-  const rounds = region.rounds;
-  const roundNames = ["R64","R32","S16","E8"];
-  const gap = compact ? 4 : 8;
-
-  return (
-    <div style={{display:"flex",gap:gap,alignItems:"flex-start"}}>
-      {rounds.map((round, ri) => (
-        <div key={ri} style={{display:"flex",flexDirection:"column",gap:0}}>
-          <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"0.62rem",letterSpacing:2,color:region.color,textAlign:"center",marginBottom:4,opacity:0.7}}>{roundNames[ri]}</div>
-          <div style={{display:"flex",flexDirection:"column",justifyContent:"space-around",height: compact ? (ri===0?320:ri===1?320:ri===2?320:320) : (ri===0?480:ri===1?480:ri===2?480:480) }}>
-            {round.map((game, gi) => game && (
-              <div key={gi} style={{display:"flex",alignItems:"center",marginBottom:ri===0?compact?2:4:0}}>
-                <BracketGame
-                  game={game}
-                  color={region.color}
-                  compact={compact}
-                  
-                />
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// Known 2026 NCAA tournament results — seeded so bracket shows even before GO LIVE
-// Updated manually as games complete
+// Known 2026 NCAA tournament results
+// Add winners here as games complete — format: { winner:"School Name", loser:"School Name" }
 const KNOWN_RESULTS_2026 = [
-  // Thursday March 19 — Round of 64 (CONFIRMED FINALS)
-  { winner:"TCU",        loser:"Ohio State"  },  // TCU 66-64
-  { winner:"Nebraska",   loser:"Troy"        },  // Nebraska 76-47 🎉 first NCAA win ever
-  { winner:"Louisville", loser:"USF"         },  // Louisville 83-79
-  { winner:"High Point", loser:"Wisconsin"   },  // HIGH POINT UPSET 83-82 🚨
-  { winner:"Duke",       loser:"Siena"       },  // Duke survived 71-65
-  // Friday March 20 — add results as they come in:
-  // { winner:"WINNER_TEAM", loser:"LOSER_TEAM" },
+  // Thursday March 19
+  { winner:"TCU",        loser:"Ohio State"  },  // 66-64
+  { winner:"Nebraska",   loser:"Troy"        },  // 76-47
+  { winner:"Louisville", loser:"USF"         },  // 83-79
+  { winner:"High Point", loser:"Wisconsin"   },  // 83-82 UPSET 🚨
+  { winner:"Duke",       loser:"Siena"       },  // 71-65
+  // Add Friday March 20 results below:
 ];
 
-// ESPN short name → bracket team name aliases
 const ESPN_ALIASES = {
   "duke":"duke","ohio st":"ohio state","ohio state":"ohio state","tcu":"tcu",
-  "st. john's":"st. john's","st johns":"st. john's","northern iowa":"northern iowa",
+  "st john's":"st. john's","st. john's":"st. john's","northern iowa":"n. iowa",
   "kansas":"kansas","cal baptist":"cal baptist","louisville":"louisville",
   "usf":"usf","south florida":"usf","michigan st":"michigan state","michigan state":"michigan state",
-  "n. dakota st":"n. dakota st.","north dakota state":"n. dakota st.","ndsu":"n. dakota st.",
+  "n dakota st":"n. dakota st.","north dakota state":"n. dakota st.","ndsu":"n. dakota st.",
   "ucla":"ucla","ucf":"ucf","uconn":"uconn","connecticut":"uconn","furman":"furman",
-  "arizona":"arizona","winthrop":"winthrop","miss. state":"miss. state","mississippi state":"miss. state",
-  "wake forest":"wake forest","oregon":"oregon","liberty":"liberty","baylor":"baylor","vermont":"vermont",
-  "marquette":"marquette","wisconsin":"wisconsin","quinnipiac":"quinnipiac",
-  "miami":"miami fl","miami (fl)":"miami fl","miami fl":"miami fl","miami (fla.)":"miami fl",
-  "missouri":"missouri","purdue":"purdue","queens":"queens",
+  "arizona":"arizona","winthrop":"winthrop","miss state":"miss. state","mississippi state":"miss. state",
+  "wake forest":"wake forest","purdue":"purdue","queens":"queens",
   "florida":"florida","clemson":"clemson","iowa":"iowa","vanderbilt":"vanderbilt",
-  "mcneese":"mcneese state","mcneese state":"mcneese state","nebraska":"nebraska","troy":"troy",
-  "north carolina":"n. carolina","unc":"n. carolina","n. carolina":"n. carolina",
-  "vcu":"vcu","illinois":"illinois","penn":"penn","saint mary's":"st. mary's","st. mary's":"st. mary's",
-  "texas a&m":"texas a&m","houston":"houston","siu":"siu-e","siue":"siu-e",
+  "mcneese":"mcneese","mcneese state":"mcneese","nebraska":"nebraska","troy":"troy",
+  "north carolina":"n. carolina","unc":"n. carolina","n carolina":"n. carolina",
+  "vcu":"vcu","illinois":"illinois","penn":"penn",
+  "texas a&m":"texas a&m","houston":"houston","siue":"siu-e","siu edwardsville":"siu-e",
   "michigan":"michigan","umbc":"umbc/howard","howard":"umbc/howard",
-  "georgia":"georgia","saint louis":"saint louis","st. louis":"saint louis",
+  "georgia":"georgia","saint louis":"saint louis","st louis":"saint louis",
   "texas tech":"texas tech","akron":"akron","alabama":"alabama","hofstra":"hofstra",
-  "tennessee":"tennessee","miami (oh)":"miami oh/smu","wright st":"wright state","wright state":"wright state",
-  "kentucky":"kentucky","santa clara":"santa clara","iowa state":"iowa state","tennessee state":"tenn. state","tenn. state":"tenn. state",
-  "siena":"siena",
-  "gonzaga":"gonzaga","byu":"byu","brigham young":"byu",
-  "villanova":"villanova","nova":"villanova",
-  "utah state":"utah state","utah st":"utah state",
-  "arkansas":"arkansas","razorbacks":"arkansas",
-  "hawaii":"hawaii","hawai'i":"hawaii",
+  "tennessee":"tennessee","wright state":"wright state","wright st":"wright state",
+  "kentucky":"kentucky","santa clara":"santa clara","iowa state":"iowa state",
+  "tennessee state":"tenn. state","tenn state":"tenn. state",
+  "siena":"siena","gonzaga":"gonzaga","byu":"byu","brigham young":"byu",
+  "villanova":"villanova","utah state":"utah state","utah st":"utah state",
+  "arkansas":"arkansas","hawaii":"hawaii",
   "liu":"liu","long island":"liu","long island university":"liu",
-  "kennesaw":"kennesaw st.","kennesaw state":"kennesaw st.",
-  "high point":"high point","hp":"high point",
-  "idaho":"idaho","vandals":"idaho",
-  "northern iowa":"n. iowa","n. iowa":"n. iowa",
+  "kennesaw state":"kennesaw st.","kennesaw st":"kennesaw st.",
+  "high point":"high point","missouri":"missouri",
+  "miami fl":"miami fl","miami fla":"miami fl",
+  "idaho":"idaho","nebraska":"nebraska",
 };
 
 function normalizeTeam(name) {
   if (!name) return "";
-  // Strip seed prefix like "(1) " → remove leading digits and spaces
   let n = name.toLowerCase()
-    .replace(/^\(\d+\)\s*/, "")   // remove "(N) " prefix
-    .replace(/^\d+\s+/, "")         // remove "N " prefix (after parens stripped)
-    .replace(/[^a-z0-9&\s]/g, "")   // remove remaining punctuation
+    .replace(/^\(\d+\)\s*/, "")
+    .replace(/^\d+\s+/, "")
+    .replace(/[^a-z0-9&\s]/g, "")
     .trim();
   return ESPN_ALIASES[n] || n;
 }
 
-function BracketPanel({ scores }) {
-  const { state, stateRef, advance, reset, loaded } = useBracketState();
-  const [popup, setPopup] = useState(null);
-  const [viewRegion, setViewRegion] = useState("east");
-  const processedGames = useRef(new Set());
-
-  // Core matching: uses stateRef.current so it always has fresh data
-  const processResult = useCallback((winnerName, loserName, gameId=null) => {
-    if (gameId && processedGames.current.has(gameId)) return false;
-    const currentState = stateRef.current;
-    if (!currentState?.regions) return false;
-    let matched = false;
-    outer: for (const [rk, region] of Object.entries(currentState.regions)) {
-      for (let ri = 0; ri < region.rounds.length; ri++) {
-        const round = region.rounds[ri];
-        for (let gi = 0; gi < round.length; gi++) {
-          const game = round[gi];
-          if (!game || game.winner) continue;
-          const bt1 = normalizeTeam(game.team1);
-          const bt2 = normalizeTeam(game.team2);
-          if (!bt1 || !bt2) continue;
-          const t1wins = bt1 === winnerName && bt2 === loserName;
-          const t2wins = bt2 === winnerName && bt1 === loserName;
-          if (t1wins || t2wins) {
-            matched = true;
-            if (gameId) processedGames.current.add(gameId);
-            const winner = t1wins ? game.team1 : game.team2;
-            advance(rk, ri, gi, winner);
-            setPopup({ team: winner, region: { name: region.name, color: region.color } });
-            break outer;
+// ============================================================
+// BRACKET — simple, crash-proof, Firebase-backed
+// ============================================================
+function applyResult(bracketState, winnerName, loserName) {
+  // Returns a new bracket state with the winner advanced
+  const state = JSON.parse(JSON.stringify(bracketState));
+  for (const [rk, region] of Object.entries(state.regions)) {
+    for (let ri = 0; ri < region.rounds.length; ri++) {
+      const round = region.rounds[ri] || [];
+      for (let gi = 0; gi < round.length; gi++) {
+        const game = round[gi];
+        if (!game || game.winner) continue;
+        const bt1 = normalizeTeam(game.team1);
+        const bt2 = normalizeTeam(game.team2);
+        if (!bt1 || !bt2) continue;
+        if (bt1 === winnerName && bt2 === loserName) {
+          game.winner = game.team1;
+          // advance to next round
+          if (ri + 1 < 4) {
+            const ng = Math.floor(gi / 2);
+            if (!region.rounds[ri+1]) region.rounds[ri+1] = [];
+            if (!region.rounds[ri+1][ng]) region.rounds[ri+1][ng] = {team1:null,team2:null,winner:null};
+            region.rounds[ri+1][ng][gi%2===0?"team1":"team2"] = game.team1;
           }
+          return state;
+        }
+        if (bt2 === winnerName && bt1 === loserName) {
+          game.winner = game.team2;
+          if (ri + 1 < 4) {
+            const ng = Math.floor(gi / 2);
+            if (!region.rounds[ri+1]) region.rounds[ri+1] = [];
+            if (!region.rounds[ri+1][ng]) region.rounds[ri+1][ng] = {team1:null,team2:null,winner:null};
+            region.rounds[ri+1][ng][gi%2===0?"team1":"team2"] = game.team2;
+          }
+          return state;
         }
       }
     }
-    return matched;
-  }, [advance, stateRef]);
+  }
+  return state; // no match found, return unchanged
+}
 
-  // Always apply known results after Firebase loads
-  // processResult skips games that already have a winner, so this is safe
-  useEffect(() => {
-    if (!loaded) return;
-    KNOWN_RESULTS_2026.forEach(r => {
-      processResult(normalizeTeam(r.winner), normalizeTeam(r.loser));
-    });
-  }, [loaded]);
+function buildBracketWithResults(results) {
+  let state = initBracket();
+  for (const r of results) {
+    state = applyResult(state, normalizeTeam(r.winner), normalizeTeam(r.loser));
+  }
+  return state;
+}
 
-  // Auto-update from ESPN live feed
+function BracketGame({ game, color }) {
+  const t1 = game.team1 || "TBD";
+  const t2 = game.team2 || "TBD";
+  const rowStyle = (team, isWinner) => ({
+    display:"flex", alignItems:"center", justifyContent:"space-between",
+    padding:"5px 8px",
+    background: isWinner ? `${color}25` : (game.winner && !isWinner ? "transparent" : "#0f0f1a"),
+    borderRadius:3, marginBottom:1,
+    opacity: game.winner && !isWinner ? 0.3 : 1,
+    transition:"all 0.4s",
+  });
+  return (
+    <div style={{background:"#161624",border:`1px solid ${game.winner?"#1e1e30":"#1e1e30"}`,borderRadius:5,padding:2,minWidth:148,position:"relative",overflow:"hidden"}}>
+      {!game.winner && game.team1 && game.team2 && <div style={{position:"absolute",top:0,left:0,right:0,height:2,background:`${color}44`}} />}
+      {game.winner && <div style={{position:"absolute",top:0,left:0,right:0,height:2,background:color}} />}
+      <div style={rowStyle(t1, game.winner===t1)}>
+        <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"0.72rem",letterSpacing:0.5,color:game.winner===t1?color:"#e8e8f0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:108}}>{t1}</span>
+        {game.score1!=null && <span style={{fontFamily:"'Source Code Pro',monospace",fontSize:"0.68rem",color:game.score1>game.score2?"#00e676":"#6a6a8a",flexShrink:0,marginLeft:3}}>{game.score1}</span>}
+        {game.winner===t1 && <span style={{color,fontSize:"0.6rem",marginLeft:3,flexShrink:0}}>✓</span>}
+      </div>
+      <div style={{height:1,background:"#252538"}} />
+      <div style={rowStyle(t2, game.winner===t2)}>
+        <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"0.72rem",letterSpacing:0.5,color:game.winner===t2?color:"#e8e8f0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:108}}>{t2}</span>
+        {game.score2!=null && <span style={{fontFamily:"'Source Code Pro',monospace",fontSize:"0.68rem",color:game.score2>game.score1?"#00e676":"#6a6a8a",flexShrink:0,marginLeft:3}}>{game.score2}</span>}
+        {game.winner===t2 && <span style={{color,fontSize:"0.6rem",marginLeft:3,flexShrink:0}}>✓</span>}
+      </div>
+    </div>
+  );
+}
+
+function AdvancementPopup({ team, regionName, regionColor, onDone }) {
+  useEffect(() => { const t = setTimeout(onDone, 4000); return () => clearTimeout(t); }, [onDone]);
+  return (
+    <div style={{position:"fixed",inset:0,zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",pointerEvents:"none"}}>
+      <div style={{background:"#0f0f1a",border:`2px solid ${regionColor}`,borderRadius:16,padding:"28px 36px",textAlign:"center",boxShadow:`0 0 60px ${regionColor}66`,animation:"popIn 0.4s ease-out"}}>
+        <style>{`@keyframes popIn{from{transform:scale(0.5);opacity:0;}to{transform:scale(1);opacity:1;}}`}</style>
+        <div style={{fontSize:"2.5rem",marginBottom:8}}>🏀</div>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"0.75rem",letterSpacing:3,color:regionColor,marginBottom:4}}>{regionName} REGION</div>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"clamp(1.2rem,4vw,1.8rem)",letterSpacing:3,color:"#fff",marginBottom:6}}>{team}</div>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"0.9rem",letterSpacing:3,color:"#00e676"}}>ADVANCES ✓</div>
+      </div>
+    </div>
+  );
+}
+
+function BracketPanel({ scores }) {
+  const [viewRegion, setViewRegion] = useState("east");
+  const [popup, setPopup] = useState(null);
+  const [extraResults, setExtraResults] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("cave_extra_results_2026")||"[]"); } catch { return []; }
+  });
+  const prevFinalRef = useRef(new Set());
+
+  // Combine hardcoded known results + any ESPN live finals
+  const allResults = [...KNOWN_RESULTS_2026, ...extraResults];
+  const bracketState = buildBracketWithResults(allResults);
+
+  // Watch ESPN scores for new finals
   useEffect(() => {
-    if (!scores.length || !loaded) return;
+    if (!scores.length) return;
+    let added = false;
+    const newExtras = [...extraResults];
     scores.forEach(g => {
       if (!g.isFinal) return;
-      if (processedGames.current.has(g.id)) return;
+      if (prevFinalRef.current.has(g.id)) return;
+      prevFinalRef.current.add(g.id);
       const w = normalizeTeam(g.homeScore >= g.awayScore ? g.home : g.away);
       const l = normalizeTeam(g.homeScore >= g.awayScore ? g.away : g.home);
-      processResult(w, l, g.id);
+      if (!w || !l) return;
+      // Check it matches a bracket game that doesn't have a winner yet
+      const testState = buildBracketWithResults(allResults);
+      let matchFound = false;
+      for (const region of Object.values(testState.regions)) {
+        for (const round of region.rounds) {
+          for (const game of (round||[])) {
+            if (!game || game.winner) continue;
+            if (normalizeTeam(game.team1)===w && normalizeTeam(game.team2)===l) { matchFound=true; break; }
+            if (normalizeTeam(game.team2)===w && normalizeTeam(game.team1)===l) { matchFound=true; break; }
+          }
+          if (matchFound) break;
+        }
+        if (matchFound) break;
+      }
+      if (matchFound) {
+        newExtras.push({ winner: g.homeScore >= g.awayScore ? g.home : g.away, loser: g.homeScore >= g.awayScore ? g.away : g.home });
+        added = true;
+        // Find winner display name for popup
+        const finalState = buildBracketWithResults([...allResults, {winner:g.homeScore>=g.awayScore?g.home:g.away,loser:g.homeScore>=g.awayScore?g.away:g.home}]);
+        for (const [rk, region] of Object.entries(finalState.regions)) {
+          for (const round of region.rounds) {
+            for (const game of (round||[])) {
+              if (game?.winner && (normalizeTeam(game.winner)===w)) {
+                setPopup({team:game.winner, regionName:region.name, regionColor:region.color});
+              }
+            }
+          }
+        }
+      }
     });
-  }, [scores, loaded, processResult]);
+    if (added) {
+      setExtraResults(newExtras);
+      try { localStorage.setItem("cave_extra_results_2026", JSON.stringify(newExtras)); } catch {}
+    }
+  }, [scores]);
 
-  const regions = Object.entries(state.regions);
-  const currentRegion = state.regions[viewRegion];
+  const regions = Object.entries(bracketState.regions);
+  const currentRegion = bracketState.regions[viewRegion];
+  const roundNames = ["R64","R32","S16","E8"];
 
   return (
     <div>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-        <div style={{fontFamily:"'Bebas Neue',sans-serif",letterSpacing:3,fontSize:"1.1rem",color:"#f5c842"}}>2026 LIVE BRACKET</div>
-        <div style={{display:"flex",gap:5,alignItems:"center"}}>
-          <span style={{fontSize:"0.65rem",color:"#6a6a8a"}}>Auto-updates from ESPN scores 📡</span>
-          <button onClick={reset} style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"0.65rem",letterSpacing:1,padding:"3px 8px",background:"transparent",color:"#6a6a8a",border:"1px solid #252538",borderRadius:4,cursor:"pointer"}}>RESET</button>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",letterSpacing:3,fontSize:"1.1rem",color:"#f5c842"}}>2026 NCAA BRACKET</div>
+        <div style={{display:"flex",gap:6,alignItems:"center"}}>
+          <span style={{fontSize:"0.62rem",color:"#6a6a8a"}}>Live via ESPN 📡</span>
+          <button onClick={()=>{setExtraResults([]);try{localStorage.removeItem("cave_extra_results_2026");}catch{}}} style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"0.62rem",letterSpacing:1,padding:"2px 7px",background:"transparent",color:"#6a6a8a",border:"1px solid #252538",borderRadius:4,cursor:"pointer"}}>RESET</button>
         </div>
       </div>
 
       {/* Region tabs */}
-      <div style={{display:"flex",gap:4,marginBottom:12,overflowX:"auto"}}>
+      <div style={{display:"flex",gap:4,marginBottom:10,overflowX:"auto"}}>
         {regions.map(([key,r]) => (
-          <button key={key} onClick={()=>setViewRegion(key)} style={{fontFamily:"'Bebas Neue',sans-serif",letterSpacing:2,fontSize:"0.72rem",padding:"5px 12px",background:viewRegion===key?r.color:"transparent",color:viewRegion===key?"#000":r.color,border:`1px solid ${r.color}`,borderRadius:5,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0,transition:"all 0.2s"}}>
+          <button key={key} onClick={()=>setViewRegion(key)}
+            style={{fontFamily:"'Bebas Neue',sans-serif",letterSpacing:2,fontSize:"0.7rem",padding:"4px 12px",background:viewRegion===key?r.color:"transparent",color:viewRegion===key?"#000":r.color,border:`1px solid ${r.color}`,borderRadius:5,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0,transition:"all 0.2s"}}>
             {r.name}
           </button>
         ))}
       </div>
 
-      {/* Region bracket — scrollable horizontally */}
-      {!loaded && <div style={{textAlign:"center",padding:30,color:"#6a6a8a",fontSize:"0.85rem",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:2}}>LOADING BRACKET...</div>}
-      {loaded && <div style={{overflowX:"auto",overflowY:"hidden",paddingBottom:8}}>
-        <BracketRegion
-          regionKey={viewRegion}
-          region={currentRegion}
-          compact={false}
-        />
-      </div>}
+      {/* Bracket columns */}
+      <div style={{overflowX:"auto",paddingBottom:8}}>
+        <div style={{display:"flex",gap:6,alignItems:"flex-start",minWidth:"fit-content"}}>
+          {currentRegion.rounds.map((round, ri) => (
+            <div key={ri} style={{display:"flex",flexDirection:"column"}}>
+              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"0.6rem",letterSpacing:2,color:currentRegion.color,textAlign:"center",marginBottom:4,opacity:0.7}}>{roundNames[ri]}</div>
+              <div style={{display:"flex",flexDirection:"column",justifyContent:"space-around",gap:ri===0?4:0,minHeight:ri===0?520:ri===1?520:ri===2?520:520}}>
+                {(round||[]).map((game,gi) => game ? (
+                  <BracketGame key={gi} game={game} color={currentRegion.color} />
+                ) : null)}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
 
       {/* Final Four summary */}
-      <div style={{marginTop:16,background:"#0f0f1a",border:"1px solid rgba(245,200,66,0.3)",borderRadius:8,padding:"10px 14px"}}>
-        <div style={{fontFamily:"'Bebas Neue',sans-serif",letterSpacing:3,fontSize:"0.85rem",color:"#f5c842",marginBottom:8}}>FINAL FOUR · INDIANAPOLIS</div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-          {Object.entries(state.regions).map(([key,r]) => {
-            const eliteEight = r.rounds[3]?.[0];
-            const ff = eliteEight?.winner;
+      <div style={{marginTop:12,background:"#0f0f1a",border:"1px solid rgba(245,200,66,0.25)",borderRadius:8,padding:"10px 12px"}}>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",letterSpacing:3,fontSize:"0.82rem",color:"#f5c842",marginBottom:8}}>FINAL FOUR · INDIANAPOLIS</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+          {regions.map(([key,r]) => {
+            const e8 = r.rounds[3]?.[0];
+            const ff = e8?.winner;
             return (
-              <div key={key} style={{background:ff?"#161624":"#0a0a14",border:`1px solid ${ff?r.color:"#252538"}`,borderRadius:6,padding:"6px 10px",display:"flex",alignItems:"center",gap:6}}>
-                <div style={{width:6,height:6,borderRadius:"50%",background:r.color,flexShrink:0}} />
+              <div key={key} style={{background:ff?"#161624":"#0a0a14",border:`1px solid ${ff?r.color:"#252538"}`,borderRadius:5,padding:"5px 9px",display:"flex",alignItems:"center",gap:6}}>
+                <div style={{width:5,height:5,borderRadius:"50%",background:r.color,flexShrink:0}} />
                 <div>
-                  <div style={{fontSize:"0.58rem",color:r.color,fontFamily:"'Bebas Neue',sans-serif",letterSpacing:1}}>{r.name}</div>
-                  <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"0.8rem",color:ff?"#fff":"#6a6a8a"}}>{ff||"TBD"}</div>
+                  <div style={{fontSize:"0.55rem",color:r.color,fontFamily:"'Bebas Neue',sans-serif",letterSpacing:1}}>{r.name}</div>
+                  <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"0.78rem",color:ff?"#fff":"#6a6a8a"}}>{ff||"TBD"}</div>
                 </div>
               </div>
             );
@@ -2074,11 +2052,11 @@ function BracketPanel({ scores }) {
         </div>
       </div>
 
-      {/* Popup overlay */}
-      {popup && <AdvancementPopup team={popup.team} region={popup.region} onDone={()=>setPopup(null)} />}
+      {popup && <AdvancementPopup {...popup} onDone={()=>setPopup(null)} />}
     </div>
   );
 }
+
 
 // ============================================================
 // MAIN APP
