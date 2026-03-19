@@ -22,7 +22,7 @@ const db = getDatabase(firebaseApp);
 // ============================================================
 const ODDS_API_KEY = "7fec6f19b1eb6838a13fa733bee6d610";
 const ODDS_API_BASE = "https://api.the-odds-api.com/v4";
-const ANTHROPIC_KEY = import.meta.env.VITE_ANTHROPIC_KEY || "";
+const ANTHROPIC_KEY = import.meta.env.VITE_ANTHROPIC_KEY || "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";
 const ANTHROPIC_HDR = {
   "Content-Type": "application/json",
   "x-api-key": ANTHROPIC_KEY,
@@ -106,7 +106,6 @@ async function callOracle(prompt) {
     }),
   });
   const data = await res.json();
-  console.log("Oracle API response:", JSON.stringify(data).slice(0,300));
   if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
   // Track real token usage from API response
   const inputTok = data.usage?.input_tokens || 600;
@@ -802,7 +801,7 @@ function VotePanel({ toast, onAddVote }) {
 // ============================================================
 // ORACLE
 // ============================================================
-function OraclePanel({ isLive, toast, games }) {
+function OraclePanel({ isLive, toast, games, scores }) {
   const [picks, setPicks] = useState([]);
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(null);
@@ -811,11 +810,41 @@ function OraclePanel({ isLive, toast, games }) {
   const fetchPicks = async () => {
     if (loading) return;
     setLoading(true);
-    const gameList = games.length
-      ? games.slice(0,6).map(g=>`${g.team1} vs ${g.team2} (spread: ${g.spread}, O/U: ${g.ou})`).join(", ")
-      : "2026 NCAA Tournament First Round: (1)Duke vs (16)Siena, (8)Ohio State vs (9)TCU, (4)Nebraska vs (13)Troy, (6)Louisville vs (11)USF, (5)Vanderbilt vs (12)McNeese State, (3)Michigan State vs (14)North Dakota St, (6)North Carolina vs (11)VCU, (3)Illinois vs (14)Penn, (7)St Marys vs (10)Texas A&M, (2)Houston vs (15)SIU Edwardsville, (1)Michigan vs (16)UMBC/Howard, (8)Georgia vs (9)Saint Louis, (5)Texas Tech vs (12)Akron, (4)Alabama vs (13)Hofstra, (6)Tennessee vs (11)Miami OH/SMU, (3)Virginia vs (14)Wright State, (7)Kentucky vs (10)Santa Clara, (2)Iowa State vs (15)Tennessee State, (1)Florida vs (16)PV/Lehigh, (8)Clemson vs (9)Iowa, (5)St Johns vs (12)Northern Iowa, (4)Kansas vs (13)Cal Baptist, (7)UCLA vs (10)UCF, (2)UConn vs (15)Furman, (1)Arizona vs (16)Winthrop, (8)Mississippi State vs (9)Wake Forest, (5)Oregon vs (12)Liberty, (4)Baylor vs (13)Vermont, (6)Marquette vs (11)Texas/NC State, (3)Wisconsin vs (14)Quinnipiac, (7)Miami FL vs (10)Missouri, (2)Purdue vs (15)Queens";
+
+    // Build game context from live ESPN scores first
+    const liveGames = (scores||[]).filter(g => g.isLive);
+    const upcoming = (scores||[]).filter(g => !g.isFinal && !g.isLive);
+    const recentFinals = (scores||[]).filter(g => g.isFinal).slice(0,4);
+
+    let gameContext = "";
+    if (liveGames.length) {
+      gameContext += "LIVE NOW: " + liveGames.map(g =>
+        `${g.away} ${g.awayScore}-${g.homeScore} ${g.home} (${g.clock||"live"})`
+      ).join(", ") + ". ";
+    }
+    if (upcoming.length) {
+      gameContext += "UPCOMING TODAY: " + upcoming.slice(0,6).map(g =>
+        `${g.away} vs ${g.home}`
+      ).join(", ") + ". ";
+    }
+    if (recentFinals.length) {
+      gameContext += "JUST FINISHED: " + recentFinals.map(g =>
+        `${g.away} ${g.awayScore} ${g.home} ${g.homeScore}`
+      ).join(", ") + ". ";
+    }
+    // Add odds API data for spread/totals if available
+    if (games.length) {
+      const oddsContext = games.slice(0,6).map(g=>
+        `${g.team1} vs ${g.team2} (spread:${g.spread} O/U:${g.ou})`
+      ).join(", ");
+      gameContext += "ODDS: " + oddsContext;
+    }
+    // Final fallback if nothing live yet — use today's real matchups only
+    if (!gameContext.trim()) {
+      gameContext = "2026 NCAA Tournament Thursday March 19 remaining games: North Carolina vs VCU, Illinois vs Penn, St Marys vs Texas A&M, Houston vs SIU-E, Georgia vs Saint Louis, Michigan vs UMBC/Howard. Already finished: TCU def Ohio State 66-64, Nebraska def Troy 76-47, Louisville def USF 83-79, High Point def Wisconsin 83-82 UPSET, Duke def Siena 71-65, Michigan State def N Dakota St 92-67, Arkansas def Hawaii 97-78, Vanderbilt def McNeese 78-68.";
+    }
     try {
-      const result = await callOracle(`Analyze: ${gameList}. Find the 4 best bets including parlay opportunities for our dadchelor party cave crew. Be specific, funny, and confident.`);
+      const result = await callOracle(`Current March Madness 2026 situation: ${gameContext} Give us 4 sharp picks for games still to be played or live — do NOT pick games already finished. Focus on live lines and upcoming games. Be specific, funny, and confident for our dadchelor party crew.`);
       setPicks(result.picks || []);
       setLastFetch(new Date().toLocaleTimeString());
       toast("Oracle has spoken! 🔮");
@@ -2361,7 +2390,7 @@ export default function App() {
           {/* CENTER */}
           <div>
             <div style={card}><VotePanel toast={showToast} onAddVote={addVoteRef} /></div>
-            <div style={card}><OraclePanel isLive={isLive} toast={showToast} games={games} onVote={(pick,odds)=>{if(addVoteRef.current){addVoteRef.current(pick,odds);showToast("Oracle pick sent to vote! 🗳️");}}} /></div>
+            <div style={card}><OraclePanel isLive={isLive} toast={showToast} games={games} scores={scores} onVote={(pick,odds)=>{if(addVoteRef.current){addVoteRef.current(pick,odds);showToast("Oracle pick sent to vote! 🗳️");}}} /></div>
 
           </div>
 
