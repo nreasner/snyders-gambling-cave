@@ -506,6 +506,11 @@ function useOddsAPI(isLive) {
       const now = Date.now();
       const mapped = data
         .sort((a, b) => new Date(a.commence_time) - new Date(b.commence_time))
+        .filter(g => {
+          // Drop games that started more than 3 hours ago (almost certainly final)
+          const start = new Date(g.commence_time).getTime();
+          return now < start + 3*3600000;
+        })
         .slice(0, 14)
         .map(g => {
           const dk = g.bookmakers?.find(b => b.key==="draftkings") || g.bookmakers?.[0];
