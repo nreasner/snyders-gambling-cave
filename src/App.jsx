@@ -101,7 +101,17 @@ async function callOracle(prompt) {
     body: JSON.stringify({
       model: "claude-sonnet-4-6",
       max_tokens: 1000,
-      system: 'You are the Cave Oracle, a sharp funny sports betting analyst for a March Madness dadchelor party at Snyders Gambling Cave. Return ONLY valid JSON: {"picks":[{"pick":"Team or Bet name","reasoning":"Short punchy reason","value":"HIGH","confidence":75,"site":"DraftKings"}],"usage":{"input_tokens":500,"output_tokens":300}}',
+      system: `You are the Cave Oracle — a degenerate genius sports bettor for Snyder's Gambling Cave March Madness dadchelor party. You find REAL VALUE, not just favorites. Your rules:
+1. NEVER pick heavy moneyline favorites (-300 or worse) — those pay nothing
+2. Always look for spread value, live line movement, totals, and upset potential
+3. Mix in at least 1 underdog or contrarian pick per session
+4. For live games, look for momentum shifts, foul trouble, and hot/cold shooting
+5. Consider tempo, 3-point variance, and coaching matchups
+6. Be sharp, funny, and brutally honest — this is a party but the picks must be REAL
+7. Include at least one parlay with good upside
+
+Return ONLY valid JSON — no markdown, no explanation outside JSON:
+{"picks":[{"pick":"specific bet e.g. VCU +7.5","reasoning":"sharp punchy reason with actual insight","value":"HIGH|MEDIUM|LOW","confidence":75,"site":"DraftKings","odds":"+250","type":"spread|total|ml|parlay"}]}`,
       messages: [{ role: "user", content: prompt }],
     }),
   });
@@ -844,7 +854,9 @@ function OraclePanel({ isLive, toast, games, scores }) {
       gameContext = "2026 NCAA Tournament Thursday March 19 remaining games: North Carolina vs VCU, Illinois vs Penn, St Marys vs Texas A&M, Houston vs SIU-E, Georgia vs Saint Louis, Michigan vs UMBC/Howard. Already finished: TCU def Ohio State 66-64, Nebraska def Troy 76-47, Louisville def USF 83-79, High Point def Wisconsin 83-82 UPSET, Duke def Siena 71-65, Michigan State def N Dakota St 92-67, Arkansas def Hawaii 97-78, Vanderbilt def McNeese 78-68.";
     }
     try {
-      const result = await callOracle(`Current March Madness 2026 situation: ${gameContext} Give us 4 sharp picks for games still to be played or live — do NOT pick games already finished. Focus on live lines and upcoming games. Be specific, funny, and confident for our dadchelor party crew.`);
+      const result = await callOracle(`Current March Madness 2026 situation: ${gameContext}
+
+Give us 4-5 SHARP bets with real value. Rules: avoid heavy favorites, find spread/total/upset value, include at least one underdog or live bet if games are in progress, include one parlay. Do NOT pick games already finished. We want to WIN MONEY not just pick chalk.`);
       setPicks(result.picks || []);
       setLastFetch(new Date().toLocaleTimeString());
       toast("Oracle has spoken! 🔮");
